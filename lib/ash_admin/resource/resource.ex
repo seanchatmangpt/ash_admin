@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Resource do
   @field %Spark.Dsl.Entity{
     describe: "Declare non-default behavior for a specific attribute.",
@@ -25,6 +30,10 @@ defmodule AshAdmin.Resource do
       name: [
         type: :string,
         doc: "The proper name to use when this resource appears in the admin interface."
+      ],
+      actor_load: [
+        type: :any,
+        doc: "A load statement to apply on the actor when fetching it"
       ],
       actor?: [
         type: :boolean,
@@ -76,6 +85,15 @@ defmodule AshAdmin.Resource do
         type: {:list, :atom},
         doc: "The list of attributes to render on the table view."
       ],
+      table_sortable_columns: [
+        type: {:list, :atom},
+        doc: "The list of columns that can be sorted. If not specified, all columns are sortable."
+      ],
+      table_filterable_columns: [
+        type: {:list, :atom},
+        doc:
+          "The list of columns that can be filtered. If not specified, all columns are filterable."
+      ],
       format_fields: [
         type: {:list, :any},
         doc: """
@@ -99,14 +117,31 @@ defmodule AshAdmin.Resource do
       show_calculations: [
         type: {:list, :atom},
         doc:
-          "A list of calculation that can be calculate when this resource is shown. By default, all calculations are included."
+          "A list of calculations that can be loaded when this resource is shown. By default, no calculations are included."
+      ],
+      label_field: [
+        type: :atom,
+        doc:
+          "The field to use as the label when the resource appears in a relationship select or typeahead field on another resource's form."
+      ],
+      relationship_select_max_items: [
+        type: :integer,
+        default: 50,
+        doc:
+          "The maximum number of items to show in a select field when this resource is shown as a relationship on another resource's form. If the number of related resources is higher, a typeahead selector will be used."
       ]
     ]
   }
 
   use Spark.Dsl.Extension,
     sections: [@admin],
-    transformers: [AshAdmin.Resource.Transformers.ValidateTableColumns]
+    transformers: [
+      AshAdmin.Resource.Transformers.ValidateTableColumns,
+      AshAdmin.Resource.Transformers.AddPositionSortCalculation
+    ],
+    verifiers: [
+      AshAdmin.Resource.Verifiers.VerifyFileArgumentsExist
+    ]
 
   @moduledoc """
   A resource extension to alter the behaviour of a resource in the admin UI.
@@ -141,10 +176,30 @@ defmodule AshAdmin.Resource do
   end
 
   def name(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:admin], :name, nil, true) ||
-      resource
-      |> Module.split()
-      |> List.last()
+    case Spark.Dsl.Extension.get_opt(resource, [:admin], :name, nil, true) do
+      nil ->
+        split = Module.split(resource)
+
+        if List.last(split) == "Version" and version?(resource) do
+          split
+          |> Enum.reverse()
+          |> Enum.take(2)
+          |> Enum.reverse()
+          |> Enum.join(".")
+        else
+          List.last(split)
+        end
+
+      v ->
+        v
+    end
+  end
+
+  defp version?(resource) do
+    resource.resource_version?()
+  rescue
+    _ ->
+      false
   end
 
   def resource_group(resource) do
@@ -155,8 +210,20 @@ defmodule AshAdmin.Resource do
     Spark.Dsl.Extension.get_opt(resource, [:admin], :show_sensitive_fields, [], true)
   end
 
+  def label_field(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:admin], :label_field, nil, true)
+  end
+
+  def relationship_select_max_items(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:admin], :relationship_select_max_items, 50, true)
+  end
+
   def actor?(resource) do
     Spark.Dsl.Extension.get_opt(resource, [:admin], :actor?, false, true)
+  end
+
+  def actor_load(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:admin], :actor_load, [], true)
   end
 
   def read_actions(resource) do
@@ -211,6 +278,14 @@ defmodule AshAdmin.Resource do
     end)
   end
 
+  def table_sortable_columns(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:admin], :table_sortable_columns, nil, true)
+  end
+
+  def table_filterable_columns(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:admin], :table_filterable_columns, nil, true)
+  end
+
   defp find_polymorphic_tables(resource, domains) do
     domains
     |> Enum.flat_map(&AshAdmin.Domain.show_resources/1)
@@ -219,6 +294,20 @@ defmodule AshAdmin.Resource do
     |> Enum.map(& &1.context[:data_layer][:table])
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
+    |> case do
+      [] ->
+        []
+
+      tables ->
+        Enum.concat(
+          [
+            Spark.Dsl.Extension.get_opt(resource, [:postgres], :table),
+            Spark.Dsl.Extension.get_opt(resource, [:sqlite], :table)
+          ],
+          tables
+        )
+    end
+    |> Enum.reject(&is_nil/1)
   end
 
   defp actions_with_primary_first(resource, type) do

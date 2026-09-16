@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Components.Resource.GenericAction do
   @moduledoc false
   use Phoenix.LiveComponent
@@ -17,57 +22,62 @@ defmodule AshAdmin.Components.Resource.GenericAction do
 
   def render(assigns) do
     ~H"""
-    <div class="sm:mt-0 bg-gray-300 min-h-screen">
+    <div class="px-4 md:px-8 pt-8 pb-8">
       <%= if Enum.empty?(@action.arguments) do %>
-        <.form
-          :let={form}
-          as={:form}
-          for={@form}
-          class="flex flex-row justify-items-center pt-4"
-          phx-change="validate"
-          phx-submit="save"
-          phx-target={@myself}
-        >
-          <div :if={form.source.submitted_once?} class="ml-4 mt-4 text-red-500">
-            <ul>
-              <li :for={{field, message} <- all_errors(form)}>
-                <span :if={field}>
-                  {field}:
-                </span>
-                <span>
-                  {message}
-                </span>
-              </li>
-            </ul>
-          </div>
-          {AshAdmin.Components.Resource.Form.render_attributes(
-            assigns,
-            @resource,
-            @action,
-            form
-          )}
-          <button
-            type="submit"
-            class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        <div class="flex flex-col items-center">
+          <.form
+            :let={form}
+            as={:form}
+            for={@form}
+            phx-change="validate"
+            phx-submit="save"
+            phx-target={@myself}
           >
-            Run
-          </button>
-        </.form>
+            <div
+              :if={form.source.submitted_once?}
+              class="mb-4 text-rose-600 dark:text-rose-400"
+            >
+              <ul>
+                <li :for={{field, message} <- all_errors(form)}>
+                  <span :if={field}>
+                    {field}:
+                  </span>
+                  <span>
+                    {message}
+                  </span>
+                </li>
+              </ul>
+            </div>
+            {AshAdmin.Components.Resource.Form.render_attributes(
+              assigns,
+              @resource,
+              @action,
+              form
+            )}
+            <button
+              type="submit"
+              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+            >
+              Run
+            </button>
+          </.form>
+        </div>
       <% else %>
-        <div class="md:grid md:grid-cols-3 md:gap-6 md:mx-16 md:pt-10 mb-10"></div>
-        <div class="md:mt-0 md:col-span-2">
-          <div class="shadow-lg overflow-hidden pt-2 sm:rounded-md bg-white">
-            <div class="px-4 sm:p-6">
+        <div class="max-w-2xl mx-auto">
+          <div class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden sm:rounded-md bg-white dark:bg-slate-900">
+            <div class="px-6 py-6">
               <.form
                 :let={form}
                 as={:form}
                 for={@form}
-                class="flex flex-row"
                 phx-change="validate"
                 phx-submit="save"
                 phx-target={@myself}
               >
-                <div :if={form.source.submitted_once?} class="ml-4 mt-4 text-red-500">
+                <div
+                  :if={form.source.submitted_once?}
+                  class="mb-4 text-rose-600 dark:text-rose-400"
+                >
                   <ul>
                     <li :for={{field, message} <- all_errors(form)}>
                       <span :if={field}>
@@ -85,10 +95,10 @@ defmodule AshAdmin.Components.Resource.GenericAction do
                   @action,
                   form
                 )}
-                <div class="px-4 py-3 text-right sm:px-6 my-auto">
+                <div class="pt-4 flex justify-center">
                   <button
                     type="submit"
-                    class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
                   >
                     Run
                   </button>
@@ -99,18 +109,37 @@ defmodule AshAdmin.Components.Resource.GenericAction do
         </div>
       <% end %>
 
-      <%= case @result do %>
-        <% :pending -> %>
-        <% :ok -> %>
-          Success
-        <% {:ok, result} -> %>
-          <div class="shadow-lg overflow-auto sm:rounded-md bg-white mx-12 px-8">
-            <h1>Success</h1>
-            {render_value(assigns, result, @action.returns, @action.constraints)}
-          </div>
-        <% :error -> %>
-          Action failed
-      <% end %>
+      {render_result(assigns)}
+    </div>
+    """
+  end
+
+  defp render_result(%{result: :pending} = assigns), do: ~H""
+
+  defp render_result(%{result: :ok} = assigns) do
+    ~H"""
+    <div class="flex justify-center pt-6">
+      <span class="text-sm text-slate-600 dark:text-slate-400">Success</span>
+    </div>
+    """
+  end
+
+  defp render_result(%{result: {:ok, result}} = assigns) do
+    assigns = assign(assigns, :result_value, result)
+
+    ~H"""
+    <div class="max-w-2xl mx-auto mt-6">
+      <div class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-auto sm:rounded-md bg-white dark:bg-slate-900 px-6 py-4">
+        {render_value(assigns, @result_value, @action.returns, @action.constraints)}
+      </div>
+    </div>
+    """
+  end
+
+  defp render_result(%{result: :error} = assigns) do
+    ~H"""
+    <div class="flex justify-center pt-6">
+      <span class="text-sm text-rose-600 dark:text-rose-400">Action failed</span>
     </div>
     """
   end
@@ -192,7 +221,7 @@ defmodule AshAdmin.Components.Resource.GenericAction do
     if (is_map(value) || Keyword.keyword?(value)) && Keyword.keyword?(constraints[:fields]) do
       ~H"""
       <%= for {key, config} <- @constraints[:fields] do %>
-        <div class="block text-sm font-medium text-gray-700">
+        <div class="block text-sm font-medium text-slate-700 dark:text-slate-300">
           {to_name(key)}
         </div>
         <div>
@@ -238,6 +267,7 @@ defmodule AshAdmin.Components.Resource.GenericAction do
         else
           %{}
         end
+        |> Map.put(:ash_admin?, true)
 
       form =
         AshPhoenix.Form.for_action(socket.assigns.resource, socket.assigns.action.name,
@@ -250,85 +280,7 @@ defmodule AshAdmin.Components.Resource.GenericAction do
 
       {:ok, assign(socket, initialized: true, form: form)}
     end
-
-    # else
-    #   socket = assign(socket, assigns)
-    #   params = socket.assigns[:params] || %{}
-    #   arguments = params["args"]
-
-    #   query =
-    #     socket.assigns[:resource]
-    #     |> AshPhoenix.Form.for_read(socket.assigns.action.name,
-    #       as: "query",
-    #     )
-
-    #   {query, run_now?} =
-    #     if arguments do
-    #       {Map.put(AshPhoenix.Form.validate(query, arguments), :submitted_once?, true), true}
-    #     else
-    #       {query, socket.assigns.action.arguments == []}
-    #     end
-
-    #   socket = assign(socket, :query, query)
-
-    #   socket =
-    #     if params["page"] && socket.assigns.action.pagination do
-    #       default_limit =
-    #         socket.assigns.action.pagination.default_limit ||
-    #           socket.assigns.action.pagination.max_page_size || 25
-
-    #       count? = !!socket.assigns.action.pagination.countable
-
-    #       page_params =
-    #         AshPhoenix.LiveView.page_from_params(params["page"], default_limit, count?)
-
-    #       socket
-    #       |> assign(
-    #         :page_params,
-    #         page_params
-    #       )
-    #       |> assign(
-    #         :page_num,
-    #         page_num_from_page_params(page_params)
-    #       )
-    #     else
-    #       socket
-    #       |> assign(:page_params, nil)
-    #       |> assign(:page_num, 1)
-    #     end
-
-    #   socket =
-    #     if run_now? do
-    #       if socket.assigns[:tables] not in [[], nil] && !socket.assigns[:table] do
-    #         assign(socket, :data, {:ok, []})
-    #       else
-    #         action_opts =
-    #           if page_params = socket.assigns[:page_params] do
-    #             [page: page_params]
-    #           else
-    #             []
-    #           end
-
-    #         case AshPhoenix.Form.submit(socket.assigns.query, action_opts: action_opts, params: nil) do
-    #           {:ok, data} -> assign(socket, :data, {:ok, data})
-    #           {:error, query} -> assign(socket, data: {:error, all_errors(query)}, query: query)
-    #         end
-    #       end
-    #     else
-    #       assign(socket, :data, :loading)
-    #     end
-
-    #   {:ok,
-    #    socket
-    #    |> assign(:initialized, true)}
-    # end
   end
-
-  # defp load_fields(query) do
-  #   query
-  #   |> Ash.Query.select([])
-  #   |> Ash.Query.load(AshAdmin.Resource.table_columns(query.resource))
-  # end
 
   def handle_event("validate", params, socket) do
     params = params["form"] || %{}
@@ -340,7 +292,7 @@ defmodule AshAdmin.Components.Resource.GenericAction do
   def handle_event("save", params, socket) do
     params = params["form"] || %{}
 
-    case AshPhoenix.Form.submit(socket.assigns.form, params: params) do
+    case AshPhoenix.Form.submit(socket.assigns.form, params: params, force?: true) do
       :ok -> {:noreply, assign(socket, result: :ok)}
       {:ok, res} -> {:noreply, assign(socket, result: {:ok, res})}
       {:error, form} -> {:noreply, assign(socket, form: form, result: :error)}

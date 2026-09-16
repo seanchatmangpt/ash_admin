@@ -1,7 +1,11 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Demo.Seeder do
-  require Ash.Query
   alias Ash.Seed
-  alias Demo.Accounts.User
+  alias Demo.Accounts.{User, Preferences}
   alias Demo.Tickets.{Customer, Organization, Representative, Ticket}
 
   @spec insert_admin!(String.t(), String.t()) :: User.t()
@@ -9,7 +13,8 @@ defmodule Demo.Seeder do
     Seed.seed!(User, %{
       first_name: first_name,
       last_name: last_name,
-      admin: true
+      admin: true,
+      preferences: Preferences.new!([])
     })
   end
 
@@ -23,7 +28,8 @@ defmodule Demo.Seeder do
         history: history,
       },
       api_key: api_key,
-      alternate_profiles: []
+      alternate_profiles: [],
+      preferences: Preferences.new!([])
     })
   end
 
@@ -36,12 +42,13 @@ defmodule Demo.Seeder do
     })
   end
 
-   @spec insert_representative!(String.t(), String.t()) :: Representative.t()
-  def insert_representative!(first_name, last_name) do
+   @spec insert_representative!(String.t(), String.t(), Organization.t()) :: Representative.t()
+  def insert_representative!(first_name, last_name, organization \\ nil) do
     Seed.seed!(Representative, %{
       first_name: first_name,
       last_name: last_name,
-      representative: true
+      representative: true,
+      organization_id: organization && organization.id
     })
   end
 
@@ -87,6 +94,7 @@ Demo.Seeder.insert_admin!("Super", "Admin");
 org = Demo.Seeder.insert_organization!("Ash Project");
 Demo.Seeder.insert_user!("Alice", "Courtney", "Lorem ipsum dolor sit amet", "Duis aute irure dolor in reprehenderit in voluptate velit esse", "123456");
 bob = Demo.Seeder.insert_customer!("Bob", "Maclean");
-carol = Demo.Seeder.insert_representative!("Carol", "White");
+carol = Demo.Seeder.insert_representative!("Carol", "White", org);
+rasha = Demo.Seeder.insert_representative!("Rasha", "Khan");
 
 Demo.Seeder.insert_ticket!("Lorem ipsum", "Duis aute irure dolor in reprehenderit in voluptate", bob, carol, org);

@@ -1,4 +1,180 @@
+/*
+ * SPDX-FileCopyrightText: 2020 Zach Daniel
+ * SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs.contributors>
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
+
+/* Ensure LiveView wrapper divs pass through full height */
+[data-phx-main], [data-phx-session] {
+  height: 100%;
+}
+
+/* Bottom breathing room in scrollable content area */
+main.admin-main::after {
+  content: "";
+  display: block;
+  height: 4rem;
+}
+
+/* Sortable.js drag-and-drop for array fields */
+
+/* placeholder element is slightly transparent */
+.sortable-ghost {
+  opacity: 0.4;
+}
+
+/* draggable element is styled to indicate it's being dragged */
+.sortable-drag {
+  cursor: grabbing;
+}
+
+/* CodeMirror 6 editor styling */
+.cm-editor {
+  min-height: 200px;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+}
+
+.cm-editor.cm-focused {
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.cm-editor .cm-scroller {
+  overflow: auto;
+}
+
+/* Markdown editor */
+.md-editor-container {
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.md-editor-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.25rem 0.5rem;
+  background: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.md-editor-maximize-btn {
+  padding: 0.125rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.md-editor-maximize-btn:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.md-editor-wrapper {
+  display: flex;
+  min-height: 250px;
+}
+
+.md-editor-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.md-editor-pane .cm-editor {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+
+.md-editor-pane .cm-editor.cm-focused {
+  outline: none;
+  border-color: transparent;
+}
+
+.md-preview-pane {
+  flex: 1;
+  min-width: 0;
+  padding: 0.75rem;
+  border-left: 1px solid #d1d5db;
+  overflow: auto;
+  background: #f9fafb;
+}
+
+/* Fullscreen mode */
+.md-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #fff;
+  border: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-fullscreen .md-editor-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.md-fullscreen .md-editor-maximize-btn {
+  font-size: 1.125rem;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .cm-editor {
+    border-color: #334155; /* slate-700 */
+  }
+
+  .cm-editor.cm-focused {
+    outline-color: #64748b; /* slate-500 */
+  }
+
+  .md-editor-container {
+    border-color: #334155; /* slate-700 */
+  }
+
+  .md-editor-toolbar {
+    background: #1e293b; /* slate-800 */
+    border-bottom-color: #334155; /* slate-700 */
+  }
+
+  .md-editor-maximize-btn {
+    color: #94a3b8; /* slate-400 */
+  }
+
+  .md-editor-maximize-btn:hover {
+    background: #334155; /* slate-700 */
+    color: #f1f5f9; /* slate-100 */
+  }
+
+  .md-preview-pane {
+    border-left-color: #334155; /* slate-700 */
+    background: #0f172a; /* slate-950 */
+    color: #e2e8f0; /* slate-200 */
+  }
+
+  .md-fullscreen {
+    background: #0f172a; /* slate-950 */
+  }
+
+  /* Input placeholders */
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748b; /* slate-500 */
+    opacity: 1;
+  }
+}
 

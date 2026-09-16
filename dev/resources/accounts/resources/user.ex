@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Demo.Accounts.User do
   use Ash.Resource,
     domain: Demo.Accounts.Domain,
@@ -17,9 +22,12 @@ defmodule Demo.Accounts.User do
       field :last_name, type: :short_text
     end
 
+    show_action :read
     read_actions [:me, :read, :by_id, :by_name]
 
     table_columns [:id, :first_name, :last_name, :representative, :admin, :full_name, :api_key, :date_of_birth]
+    table_filterable_columns [:first_name]
+    table_sortable_columns [:first_name, :last_name]
 
     show_calculations [:multi_arguments, :is_super_admin?, :full_name, :nested_embed]
   end
@@ -59,8 +67,17 @@ defmodule Demo.Accounts.User do
       filter expr(first_name == ^arg(:first_name) and last_name == ^arg(:last_name))
     end
 
-    create :create
-    update :update, primary?: true
+    create :create do
+      argument :offices, {:array, :map}
+      change manage_relationship(:offices, type: :append)
+    end
+
+    update :update do
+      primary? true
+      require_atomic? false
+      argument :offices, {:array, :map}
+      change manage_relationship(:offices, type: :append_and_remove)
+    end
     update :update2
     destroy :destroy
 
@@ -129,6 +146,10 @@ defmodule Demo.Accounts.User do
       public? true
     end
 
+    attribute :preferences, Demo.Accounts.Preferences do
+      public? true
+    end
+
     attribute :representative, :boolean do
       allow_nil? false
       public? true
@@ -182,5 +203,14 @@ defmodule Demo.Accounts.User do
     attribute :org, :string
 
     timestamps()
+  end
+
+  relationships do
+    many_to_many :offices, Demo.Accounts.Office do
+      public? true
+      through Demo.Accounts.Membership
+      source_attribute_on_join_resource :user_id
+      destination_attribute_on_join_resource :office_id
+    end
   end
 end

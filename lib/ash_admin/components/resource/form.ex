@@ -1,11 +1,14 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Components.Resource.Form do
   @moduledoc false
   use Phoenix.LiveComponent
 
   import AshAdmin.Helpers
   import AshAdmin.CoreComponents
-
-  require Logger
 
   attr :resource, :any, required: true
   attr :domain, :any, required: true
@@ -27,20 +30,38 @@ defmodule AshAdmin.Components.Resource.Form do
      socket
      |> assign_new(:load_errors, fn -> %{} end)
      |> assign_new(:loaded, fn -> %{} end)
+     |> assign_new(:uploaded_files, fn -> %{} end)
      |> assign(:params, %{})}
+  end
+
+  def update(%{add_related: %{path: path, pk_field: pk_field, id: id}} = _assigns, socket) do
+    form =
+      AshPhoenix.Form.add_form(socket.assigns.form, path,
+        type: :read,
+        params: %{pk_field => id}
+      )
+
+    {:ok, assign(socket, form: form) |> allow_uploading_form_arguments()}
+  end
+
+  def update(%{remove_related: path} = _assigns, socket) do
+    form = AshPhoenix.Form.remove_form(socket.assigns.form, path)
+    {:ok, assign(socket, form: form)}
   end
 
   def update(assigns, socket) do
     {:ok,
      socket
      |> assign(assigns)
+     |> assign(:typeahead_options, [])
      |> assign_form()
+     |> allow_uploading_form_arguments()
      |> assign(:initialized, true)}
   end
 
   def render(assigns) do
     ~H"""
-    <div class="md:pt-10 sm:mt-0 bg-gray-300 min-h-screen">
+    <div class="md:pt-10 sm:mt-0">
       <div class="md:grid md:grid-cols-3 md:gap-6 md:mx-16 md:mt-10">
         <div class="mt-5 md:mt-0 md:col-span-2">
           {render_form(assigns)}
@@ -60,6 +81,12 @@ defmodule AshAdmin.Components.Resource.Form do
       </div>
     </div>
     """
+  end
+
+  defp has_forbidden_error?(form) do
+    form
+    |> AshPhoenix.Form.raw_errors()
+    |> Enum.any?(&match?(%{class: :forbidden}, &1))
   end
 
   defp all_errors(form) do
@@ -82,8 +109,16 @@ defmodule AshAdmin.Components.Resource.Form do
 
   defp render_form(assigns) do
     ~H"""
-    <div class="shadow-lg overflow-hidden sm:rounded-md bg-white">
-      <div :if={@form.source.submitted_once?} class="ml-4 mt-4 text-red-500">
+    <div class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden sm:rounded-md bg-white dark:bg-slate-900">
+      <div
+        :if={@form.source.submitted_once? && has_forbidden_error?(@form.source)}
+        class="mx-4 mt-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-300 dark:border-rose-700 rounded-md"
+      >
+        <p class="text-rose-800 dark:text-rose-300 font-medium">
+          You are not authorized to perform this action.
+        </p>
+      </div>
+      <div :if={@form.source.submitted_once?} class="ml-4 mt-4 text-rose-600 dark:text-rose-400">
         <ul>
           <li :for={{field, message} <- all_errors(@form)}>
             <span :if={field}>
@@ -110,6 +145,7 @@ defmodule AshAdmin.Components.Resource.Form do
         />
         <.form
           :let={form}
+          :if={Enum.count(actions(@resource, @type)) > 1}
           as={:action}
           for={to_form(%{}, as: :action)}
           phx-change="change_action"
@@ -120,7 +156,6 @@ defmodule AshAdmin.Components.Resource.Form do
           <.input
             type="select"
             field={form[:action]}
-            disabled={Enum.count(actions(@resource, @type)) <= 1}
             options={actions(@resource, @type)}
             value={to_string(@action.name)}
           />
@@ -146,7 +181,7 @@ defmodule AshAdmin.Components.Resource.Form do
           <div class="px-4 py-3 text-right sm:px-6">
             <button
               type="submit"
-              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
               {save_button_text(@type)}
             </button>
@@ -166,7 +201,8 @@ defmodule AshAdmin.Components.Resource.Form do
         action,
         form,
         exactly \\ nil,
-        skip \\ []
+        skip \\ [],
+        enrichments \\ %{}
       ) do
     assigns =
       assign(assigns,
@@ -174,12 +210,13 @@ defmodule AshAdmin.Components.Resource.Form do
         action: action,
         form: form,
         exactly: exactly,
-        skip: skip
+        skip: skip,
+        enrichments: enrichments
       )
 
     ~H"""
     <% {attributes, flags, bottom_attributes, relationship_args} =
-      attributes(@resource, @action, @exactly) %>
+      attributes(@resource, @action, @exactly) |> apply_enrichments(@enrichments) %>
     <div class="grid grid-cols-6 gap-6">
       <div
         :for={attribute <- Enum.reject(attributes, &(is_nil(@exactly) && &1.name in @skip))}
@@ -194,10 +231,10 @@ defmodule AshAdmin.Components.Resource.Form do
       >
         <div>
           <label
-            class="block text-sm font-medium text-gray-700"
+            class="block text-sm font-medium text-slate-700 dark:text-slate-300"
             for={@form.name <> "[#{attribute.name}]"}
           >
-            {to_name(attribute.name)}
+            {to_name(attribute)}
           </label>
           {render_attribute_input(assigns, attribute, @form)}
           <.error_tag
@@ -211,7 +248,7 @@ defmodule AshAdmin.Components.Resource.Form do
     </div>
     <div :if={!Enum.empty?(flags)} class="hidden sm:block" aria-hidden="true">
       <div class="py-5">
-        <div class="border-t border-gray-200" />
+        <div class="border-t border-slate-200 dark:border-slate-700" />
       </div>
     </div>
     <div :if={!Enum.empty?(flags)} class="grid grid-cols-6 gap-6">
@@ -226,7 +263,7 @@ defmodule AshAdmin.Components.Resource.Form do
         }
       >
         <label
-          class="block text-sm font-medium text-gray-700"
+          class="block text-sm font-medium text-slate-700 dark:text-slate-300"
           for={@form.name <> "[#{attribute.name}]"}
         >
           {to_name(attribute.name)}
@@ -242,7 +279,7 @@ defmodule AshAdmin.Components.Resource.Form do
     </div>
     <div :if={!Enum.empty?(bottom_attributes)} class="hidden sm:block" aria-hidden="true">
       <div class="py-5">
-        <div class="border-t border-gray-200" />
+        <div class="border-t border-slate-200 dark:border-slate-700" />
       </div>
     </div>
     <div :if={!Enum.empty?(bottom_attributes)} class="grid grid-cols-6 gap-6">
@@ -258,7 +295,7 @@ defmodule AshAdmin.Components.Resource.Form do
         }
       >
         <label
-          class="block text-sm font-medium text-gray-700"
+          class="block text-sm font-medium text-slate-700 dark:text-slate-300"
           for={@form.name <> "[#{attribute.name}]"}
         >
           {to_name(attribute.name)}
@@ -274,19 +311,31 @@ defmodule AshAdmin.Components.Resource.Form do
     </div>
     <div :for={{relationship, argument, opts} <- relationship_args}>
       <%= if relationship not in @skip and argument.name not in @skip do %>
+        <% rel = Ash.Resource.Info.relationship(@form.source.resource, relationship) %>
+        <% simple_select? = simple_select_relationship?(rel, argument, opts) %>
         <label
-          class="block text-sm font-medium text-gray-700"
+          class="block text-sm font-medium text-slate-700 dark:text-slate-300"
           for={@form.name <> "[#{argument.name}]"}
         >
           {to_name(argument.name)}
         </label>
-        {render_relationship_input(
-          assigns,
-          Ash.Resource.Info.relationship(@form.source.resource, relationship),
-          @form,
-          argument,
-          opts
-        )}
+        <%= if simple_select? do %>
+          {render_relationship_select_input(
+            assigns,
+            rel,
+            @form,
+            argument,
+            opts
+          )}
+        <% else %>
+          {render_relationship_input(
+            assigns,
+            rel,
+            @form,
+            argument,
+            opts
+          )}
+        <% end %>
       <% end %>
     </div>
     """
@@ -344,6 +393,18 @@ defmodule AshAdmin.Components.Resource.Form do
         {false, [key]}
       end
 
+    destination_label_field =
+      if key do
+        AshAdmin.Resource.label_field(relationship.destination)
+      end
+
+    pk_enrichments =
+      if destination_label_field && key do
+        %{key => %{related_resource: relationship.destination}}
+      else
+        %{}
+      end
+
     assigns =
       assign(assigns,
         relationship: relationship,
@@ -352,108 +413,143 @@ defmodule AshAdmin.Components.Resource.Form do
         opts: opts,
         key: key,
         hidden: hidden?,
-        exactly_fields: exactly_fields
+        exactly_fields: exactly_fields,
+        is_relationship_form: true,
+        pk_enrichments: pk_enrichments
       )
 
     ~H"""
     <div :if={!must_load?(@opts) || loaded?(@form.source.source, @relationship.name)}>
       <.inputs_for :let={inner_form} field={@form[@argument.name]}>
-        <div :if={@form.source.submitted_once?} class="ml-4 mt-4 text-red-500">
-          <ul>
-            <li :for={{field, message} <- AshPhoenix.Form.errors(inner_form.source)}>
-              <span :if={field}>
-                {to_name(field)}:
-              </span>
-              <span>
-                {message}
-              </span>
-            </li>
-          </ul>
+        <div class="mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+          <div :if={@form.source.submitted_once?} class="mt-2 mb-2 text-rose-600 dark:text-rose-400">
+            <ul>
+              <li :for={{field, message} <- AshPhoenix.Form.errors(inner_form.source)}>
+                <span :if={field}>
+                  {to_name(field)}:
+                </span>
+                <span>
+                  {message}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <.input
+            :for={kv <- inner_form.hidden}
+            :if={@hidden}
+            name={inner_form.name <> "[#{elem(kv, 0)}]"}
+            value={elem(kv, 1)}
+            type="hidden"
+          />
+          <%= if inner_form.source.form_keys[:_join] do %>
+            <.inputs_for :let={join_form} field={inner_form[:_join]}>
+              <.input
+                :for={kv <- join_form.hidden}
+                :if={@hidden}
+                name={inner_form.name <> "[#{elem(kv, 0)}]"}
+                value={elem(kv, 1)}
+                type="hidden"
+              />
+              {render_attributes(
+                assigns,
+                @relationship.through,
+                join_form.source.source.action,
+                join_form,
+                @exactly_fields || join_form_fields(join_form, inner_form.source.form_keys[:_join]),
+                skip_through_related(@exactly_fields, @relationship)
+              )}
+            </.inputs_for>
+          <% end %>
+          <%= if inner_form.source.form_keys[:_update] do %>
+            <% update_config = inner_form.source.form_keys[:_update] %>
+            <% update_resource = update_config[:resource] %>
+            <.inputs_for :let={update_form} field={inner_form[:_update]}>
+              <.input
+                :for={kv <- update_form.hidden}
+                :if={@hidden}
+                name={update_form.name <> "[#{elem(kv, 0)}]"}
+                value={
+                  if elem(kv, 0) == :_form_type and update_config[:data],
+                    do: "update",
+                    else: elem(kv, 1)
+                }
+                type="hidden"
+              />
+              {render_attributes(
+                assigns,
+                update_resource,
+                update_form.source.source.action,
+                update_form,
+                @exactly_fields || join_form_fields(update_form, update_config),
+                if(update_resource == @relationship.through,
+                  do: skip_through_related(@exactly_fields, @relationship),
+                  else: []
+                )
+              )}
+            </.inputs_for>
+          <% end %>
+          {render_attributes(
+            assigns,
+            inner_form.source.resource,
+            inner_form.source.source.action,
+            inner_form,
+            @exactly_fields || relationship_fields(inner_form),
+            skip_related(@exactly_fields, @relationship),
+            @pk_enrichments
+          )}
+
+          <button
+            :if={can_remove_related?(inner_form, @opts)}
+            type="button"
+            phx-click="remove_form"
+            phx-target={@myself}
+            phx-value-path={inner_form.name}
+            class="inline-flex items-center gap-1 mt-2 px-2 py-0.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+          >
+            <.icon name="hero-minus" class="h-3 w-3" /> Remove
+          </button>
         </div>
-        <.input
-          :for={kv <- inner_form.hidden}
-          :if={@hidden}
-          name={inner_form.name <> "[#{elem(kv, 0)}]"}
-          value={elem(kv, 1)}
-          type="hidden"
-        />
-        <%= if inner_form.source.form_keys[:_join] do %>
-          <.inputs_for :let={join_form} field={inner_form[:_join]}>
-            <.input
-              :for={kv <- join_form.hidden}
-              :if={@hidden}
-              name={inner_form.name <> "[#{elem(kv, 0)}]"}
-              value={elem(kv, 1)}
-              type="hidden"
-            />
-            {render_attributes(
-              assigns,
-              @relationship.through,
-              join_action(@relationship.through, join_form, inner_form.source.form_keys[:_join]),
-              join_form,
-              @exactly_fields || inner_form.source.form_keys[:_join][:create_fields],
-              skip_through_related(@exactly_fields, @relationship)
-            )}
-          </.inputs_for>
-        <% end %>
-        {render_attributes(
-          assigns,
-          inner_form.source.resource,
-          inner_form.source.source.action,
-          inner_form,
-          @exactly_fields || relationship_fields(inner_form),
-          skip_related(@exactly_fields, @relationship)
-        )}
+      </.inputs_for>
+      <div class="flex items-center gap-2 mt-2">
+        <button
+          :if={can_add_related?(@form, :read_action, @argument)}
+          type="button"
+          phx-click="add_form"
+          phx-target={@myself}
+          phx-value-path={@form.name <> "[#{@argument.name}]"}
+          phx-value-type="lookup"
+          phx-value-cardinality={to_string(@relationship.cardinality)}
+          class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
+        >
+          <.icon name="hero-magnifying-glass" class="h-3 w-3" /> Look up
+        </button>
 
         <button
-          :if={can_remove_related?(inner_form, @opts)}
+          :if={can_add_related?(@form, :create_action, @argument)}
           type="button"
-          phx-click="remove_form"
+          phx-click="add_form"
           phx-target={@myself}
-          phx-value-path={inner_form.name}
-          class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+          phx-value-path={@form.name <> "[#{@argument.name}]"}
+          phx-value-type="create"
+          class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
         >
-          <.icon name="hero-minus" class="h-4 w-4 text-gray-500" />
+          <.icon name="hero-plus" class="h-3 w-3" /> Create new
         </button>
-      </.inputs_for>
-      <button
-        :if={can_add_related?(@form, :read_action, @argument)}
-        type="button"
-        phx-click="add_form"
-        phx-target={@myself}
-        phx-value-path={@form.name <> "[#{@argument.name}]"}
-        phx-value-type="lookup"
-        phx-value-cardinality={to_string(@relationship.cardinality)}
-        class="flex h-6 w-6 m-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-      >
-        <.icon name="hero-magnifying-glass-circle" class="h-4 w-4 text-gray-500" />
-      </button>
-
-      <button
-        :if={can_add_related?(@form, :create_action, @argument)}
-        type="button"
-        phx-click="add_form"
-        phx-target={@myself}
-        phx-value-path={@form.name <> "[#{@argument.name}]"}
-        phx-value-type="create"
-        class="flex h-6 w-6 m-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-      >
-        <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
-      </button>
-      <button
-        :if={
-          @form.source.form_keys[@argument.name][:read_form] &&
-            !relationship_set?(@form.source.source, @relationship.name, @argument.name)
-        }
-        type="button"
-        phx-click="add_form"
-        phx-target={@myself}
-        phx-value-path={@form.name <> "[#{@argument.name}]"}
-        phx-value-type="lookup"
-        class="flex h-6 w-6 m-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-      >
-        <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
-      </button>
+        <button
+          :if={
+            @form.source.form_keys[@argument.name][:read_form] &&
+              !relationship_set?(@form.source.source, @relationship.name, @argument.name)
+          }
+          type="button"
+          phx-click="add_form"
+          phx-target={@myself}
+          phx-value-path={@form.name <> "[#{@argument.name}]"}
+          phx-value-type="lookup"
+          class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
+        >
+          <.icon name="hero-plus" class="h-3 w-3" /> Add
+        </button>
+      </div>
     </div>
     <div :if={must_load?(@opts) && !loaded?(@form.source.source, @relationship.name)}>
       <button
@@ -462,7 +558,7 @@ defmodule AshAdmin.Components.Resource.Form do
         phx-value-path={@form.name}
         phx-value-relationship={@relationship.name}
         type="button"
-        class="flex py-2 ml-4 px-4 mt-2 bg-indigo-600 text-white border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+        class="flex py-2 ml-4 px-4 mt-2 bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md justify-center items-center"
       >
         Load
       </button>
@@ -476,23 +572,296 @@ defmodule AshAdmin.Components.Resource.Form do
     """
   end
 
-  defp join_action(through, join_form, opts) do
-    name =
-      case join_form.source.type do
-        :create ->
-          opts[:create_action]
+  defp render_relationship_select_input(
+         assigns,
+         relationship,
+         form,
+         argument,
+         _opts
+       ) do
+    destination = relationship.destination
+    pk_field = Ash.Resource.Info.primary_key(destination) |> List.first()
+    label_field = AshAdmin.Resource.label_field(destination)
 
-        :update ->
-          opts[:update_action]
+    # Load all options for label lookup
+    max_items = AshAdmin.Resource.relationship_select_max_items(destination)
 
-        :destroy ->
-          opts[:destroy_action]
+    all_options =
+      destination
+      |> Ash.Query.new()
+      |> Ash.Query.load([label_field])
+      |> Ash.Query.limit(max_items + 1)
+      |> Ash.read!(
+        actor: assigns[:actor],
+        authorize?: assigns[:authorizing],
+        tenant: assigns[:tenant]
+      )
+      |> then(fn
+        %Ash.Page.Offset{results: results} -> results
+        results -> results
+      end)
+      |> Enum.map(&{to_string(Map.get(&1, label_field)), to_string(Map.get(&1, pk_field))})
 
-        :read ->
-          opts[:read_action]
+    selected_ids = get_selected_ids_for_relationship(form, argument.name, pk_field)
+
+    assigns =
+      assign(assigns,
+        relationship: relationship,
+        form: form,
+        argument: argument,
+        pk_field: pk_field,
+        label_field: label_field,
+        all_options: all_options,
+        selected_ids: selected_ids,
+        is_relationship_form: true,
+        form_component_id: assigns[:id],
+        form_component_module: __MODULE__
+      )
+
+    ~H"""
+    <div>
+      <div :if={@selected_ids != []} class="flex flex-wrap gap-1.5 mb-2">
+        <.inputs_for :let={inner_form} field={@form[@argument.name]}>
+          <.input
+            :for={kv <- inner_form.hidden}
+            name={inner_form.name <> "[#{elem(kv, 0)}]"}
+            value={elem(kv, 1)}
+            type="hidden"
+          />
+          <% pk_value = get_pk_from_inner_form(inner_form, @pk_field) %>
+          <% pk_string = pk_value && to_string(pk_value) %>
+          <% label =
+            Enum.find_value(@all_options, pk_string, fn {l, id} ->
+              if id == pk_string, do: l
+            end) %>
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+            {label}
+            <button
+              type="button"
+              phx-click="remove_form"
+              phx-target={@myself}
+              phx-value-path={inner_form.name}
+              class="inline-flex items-center justify-center h-4 w-4 rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <.icon name="hero-x-mark" class="h-3 w-3" />
+            </button>
+          </span>
+        </.inputs_for>
+      </div>
+
+      <.live_component
+        module={AshAdmin.Components.Resource.ManagedRelationshipSelectField}
+        id={"#{@form.name}-#{@argument.name}-add"}
+        relationship={@relationship}
+        form_path={"#{@form.name}[#{@argument.name}]"}
+        form_component_id={@form_component_id}
+        form_component_module={@form_component_module}
+        argument={@argument}
+        selected_ids={@selected_ids}
+        actor={@actor}
+        tenant={@tenant}
+        authorizing={@authorizing}
+      />
+    </div>
+    """
+  end
+
+  defp get_selected_ids_for_relationship(form, argument_name, pk_field) do
+    form
+    |> Phoenix.HTML.Form.input_value(argument_name)
+    |> List.wrap()
+    |> Enum.map(fn
+      %Phoenix.HTML.Form{} = f ->
+        get_pk_from_inner_form(f, pk_field)
+
+      %AshPhoenix.Form{} = f ->
+        Map.get(f.data || %{}, pk_field) ||
+          Map.get(f.params || %{}, to_string(pk_field)) ||
+          Map.get(f.params || %{}, pk_field)
+
+      %{} = map ->
+        Map.get(map, pk_field) || Map.get(map, to_string(pk_field))
+
+      _ ->
+        nil
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&to_string/1)
+  end
+
+  defp get_pk_from_inner_form(inner_form, pk_field) do
+    data_value =
+      case inner_form do
+        %Phoenix.HTML.Form{data: data} when is_map(data) -> Map.get(data, pk_field)
+        _ -> nil
       end
 
-    Ash.Resource.Info.action(through, name)
+    params_value =
+      case inner_form do
+        %Phoenix.HTML.Form{params: params} when is_map(params) ->
+          Map.get(params, to_string(pk_field)) || Map.get(params, pk_field)
+
+        _ ->
+          nil
+      end
+
+    data_value || params_value
+  end
+
+  defp simple_select_relationship?(relationship, argument, manage_opts) do
+    destination = relationship.destination
+    destination_pk = Ash.Resource.Info.primary_key(destination)
+    has_label = AshAdmin.Resource.label_field(destination) != nil
+
+    if !has_label || !match?([_], destination_pk) || relationship.cardinality == :one do
+      false
+    else
+      # Compute exactly_fields the same way render_relationship_input does
+      key =
+        manage_opts[:value_is_key] ||
+          case destination_pk do
+            [k] -> k
+            _ -> nil
+          end
+
+      exactly_fields =
+        if map_type?(argument.type) || !key do
+          nil
+        else
+          [key]
+        end
+
+      # Check what fields the destination form would render
+      dest_only_pk? = destination_form_only_pk?(relationship, exactly_fields, manage_opts)
+
+      # Check what fields the join form would render (many_to_many only)
+      join_no_extras? = join_form_no_extra_fields?(relationship, exactly_fields, manage_opts)
+
+      dest_only_pk? && join_no_extras?
+    end
+  end
+
+  defp destination_form_only_pk?(_relationship, exactly_fields, _manage_opts)
+       when is_list(exactly_fields) do
+    # exactly_fields = [key] means only the PK is shown on the destination form
+    true
+  end
+
+  defp destination_form_only_pk?(relationship, nil, manage_opts) do
+    destination = relationship.destination
+    destination_pk = Ash.Resource.Info.primary_key(destination)
+
+    skip =
+      case relationship.type do
+        :belongs_to -> []
+        _ -> [relationship.destination_attribute]
+      end
+
+    # Check all action types that could contribute form fields
+    all_action_tuples =
+      [
+        Ash.Changeset.ManagedRelationshipHelpers.on_no_match_destination_actions(
+          manage_opts,
+          relationship
+        ),
+        Ash.Changeset.ManagedRelationshipHelpers.on_match_destination_actions(
+          manage_opts,
+          relationship
+        ),
+        Ash.Changeset.ManagedRelationshipHelpers.on_lookup_update_action(
+          manage_opts,
+          relationship
+        )
+      ]
+      |> Enum.flat_map(&List.wrap/1)
+      |> Enum.reject(&(elem(&1, 0) == :join))
+
+    # For each destination action, check if it would render fields beyond the PK
+    Enum.all?(all_action_tuples, fn action_tuple ->
+      {_source_or_dest, action_name} = extract_action_info(action_tuple)
+      action = Ash.Resource.Info.action(destination, action_name)
+
+      if action do
+        {attrs, flags, defaults, rel_args} = attributes(destination, action, nil)
+        visible = (attrs ++ flags ++ defaults) |> Enum.reject(&(&1.name in skip))
+        Enum.all?(visible, &(&1.name in destination_pk)) && rel_args == []
+      else
+        true
+      end
+    end)
+  end
+
+  defp join_form_no_extra_fields?(%{type: :many_to_many} = rel, exactly_fields, manage_opts) do
+    fk_fields =
+      MapSet.new([
+        rel.source_attribute_on_join_resource,
+        rel.destination_attribute_on_join_resource
+      ])
+
+    skip =
+      if exactly_fields do
+        # skip_through_related(exactly_fields, rel) returns []
+        MapSet.new()
+      else
+        # skip_through_related(nil, rel) returns the FK fields
+        fk_fields
+      end
+
+    # Collect all join action tuples from all manage phases
+    join_actions =
+      [
+        Ash.Changeset.ManagedRelationshipHelpers.on_no_match_destination_actions(
+          manage_opts,
+          rel
+        ),
+        Ash.Changeset.ManagedRelationshipHelpers.on_match_destination_actions(manage_opts, rel),
+        Ash.Changeset.ManagedRelationshipHelpers.on_missing_destination_actions(manage_opts, rel),
+        Ash.Changeset.ManagedRelationshipHelpers.on_lookup_update_action(manage_opts, rel)
+      ]
+      |> Enum.flat_map(&List.wrap/1)
+      |> Enum.filter(&(elem(&1, 0) == :join))
+
+    Enum.all?(join_actions, fn {:join, action_name, fields} ->
+      action = Ash.Resource.Info.action(rel.through, action_name)
+
+      if action do
+        # fields from manage_opts determine create_fields/update_fields
+        # The form renders attributes(through, action, exactly_fields || fields)
+        exactly = exactly_fields || fields
+
+        {attrs, flags, defaults, rel_args} =
+          if exactly do
+            attributes(rel.through, action, exactly)
+          else
+            attributes(rel.through, action, nil)
+          end
+
+        visible =
+          (attrs ++ flags ++ defaults)
+          |> Enum.reject(&(&1.name in skip))
+
+        visible == [] && rel_args == []
+      else
+        true
+      end
+    end)
+  end
+
+  defp join_form_no_extra_fields?(_rel, _exactly_fields, _manage_opts), do: true
+
+  defp extract_action_info({_source_or_dest, action_name, _fields}),
+    do: {:destination, action_name}
+
+  defp extract_action_info({source_or_dest, action_name}),
+    do: {source_or_dest, action_name}
+
+  defp join_form_fields(join_form, join_config) do
+    case join_form.source.type do
+      :create -> join_config[:create_fields]
+      :update -> join_config[:update_fields]
+      :destroy -> join_config[:destroy_fields]
+      :read -> join_config[:create_fields] || join_config[:update_fields]
+    end
   end
 
   defp can_add_related?(form, action, argument) do
@@ -622,6 +991,16 @@ defmodule AshAdmin.Components.Resource.Form do
     end
   end
 
+  defp datetime_step(resource, attribute) do
+    case AshAdmin.Resource.field(resource, attribute.name) do
+      %{datetime_step: datetime_step} ->
+        datetime_step
+
+      _ ->
+        "60"
+    end
+  end
+
   defp unwrap_type({:array, type}), do: unwrap_type(type)
   defp unwrap_type(type), do: type
 
@@ -657,8 +1036,16 @@ defmodule AshAdmin.Components.Resource.Form do
   end
 
   def render_attribute_input(assigns, %{type: type} = attribute, form, value, name, id, _)
-      when type in [Ash.Type.UtcDatetime, Ash.Type.UtcDatetimeUsec] do
-    assigns = assign(assigns, form: form, value: value, name: name, attribute: attribute, id: id)
+      when type in [Ash.Type.UtcDatetime, Ash.Type.UtcDatetimeUsec, Ash.Type.DateTime] do
+    assigns =
+      assign(assigns,
+        form: form,
+        value: value,
+        name: name,
+        attribute: attribute,
+        step: datetime_step(assigns.resource, attribute),
+        id: id
+      )
 
     ~H"""
     <.input
@@ -666,6 +1053,7 @@ defmodule AshAdmin.Components.Resource.Form do
       value={value(@value, @form, @attribute)}
       name={@name || @form.name <> "[#{@attribute.name}]"}
       id={@id || @form.id <> "_#{@attribute.name}"}
+      step={@step}
     />
     """
   end
@@ -713,8 +1101,81 @@ defmodule AshAdmin.Components.Resource.Form do
       id={@id || @form.id <> "_#{@attribute.name}"}
       name={@name || @form.name <> "[#{@attribute.name}]"}
       options={[True: "true", False: "false"]}
-      value={value(@value, @form, @attribute, "true")}
+      prompt={allow_nil_option(@attribute, @value)}
+      value={value(@value, @form, @attribute)}
     />
+    """
+  end
+
+  def render_attribute_input(
+        assigns,
+        %{
+          type: Ash.Type.File
+        } = attribute,
+        form,
+        value,
+        name,
+        id,
+        _
+      ) do
+    upload_key = upload_key(form, attribute)
+
+    assigns =
+      assign(assigns,
+        attribute: attribute,
+        form: form,
+        value: value,
+        name: name,
+        id: id,
+        upload_key: upload_key,
+        upload: assigns[:uploads][upload_key],
+        uploaded_file: Map.get(assigns.uploaded_files, upload_key)
+      )
+
+    ~H"""
+    <%= if @uploaded_file do %>
+      <div class="flex items-center justify-between mt-2 w-full rounded-lg border border-zinc-300 text-zinc-900 text-sm overflow-hidden">
+        <span class="px-2 py-2.5">{Path.basename(@uploaded_file.source)}</span>
+        <button
+          type="button"
+          phx-click="remove_upload"
+          phx-target={@myself}
+          phx-value-upload-key={@upload_key}
+          class="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600"
+        >
+          <.icon name="hero-minus" class="h-4 w-4 text-slate-500 dark:text-slate-400" />
+        </button>
+      </div>
+    <% else %>
+      <div phx-drop-target={@upload.ref}>
+        <label for={@id || @upload_key} class="sr-only">Choose File</label>
+        <.live_file_input
+          id={@id || @upload_key}
+          upload={@upload}
+          class="mt-2 block w-full rounded-lg border border-zinc-300 active:border-zinc-400 text-zinc-900 text-sm file:border-0 file:text-sm file:bg-slate-200 dark:file:bg-slate-700 file:me-4 file:py-2.5 file:px-4 focus:outline-none focus:border-zinc-400 target:border-zinc-400 cursor-pointer file:cursor-pointer"
+        />
+        <%= if length(@upload.entries) > 0 do %>
+          <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mb-1 mt-1">
+            <div
+              class="bg-slate-700 dark:bg-slate-300 h-1.5 rounded-full"
+              data-progress={hd(@upload.entries).progress}
+              style={"width: #{hd(@upload.entries).progress}%"}
+            >
+            </div>
+          </div>
+
+          <p
+            :for={err <- upload_errors(@upload, hd(@upload.entries))}
+            class="mb-3 flex gap-3 text-sm leading-6 text-rose-600"
+          >
+            {error_to_string(err)}
+          </p>
+        <% end %>
+      </div>
+    <% end %>
+    <p :for={err <- upload_errors(@upload)} class="alert alert-danger">
+      {error_to_string(err)}
+    </p>
     """
   end
 
@@ -736,7 +1197,13 @@ defmodule AshAdmin.Components.Resource.Form do
         id,
         _
       )
-      when type in [Ash.Type.CiString, Ash.Type.String, Ash.Type.UUID, Ash.Type.Atom] do
+      when type in [
+             Ash.Type.CiString,
+             Ash.Type.String,
+             Ash.Type.UUID,
+             Ash.Type.UUIDv7,
+             Ash.Type.Atom
+           ] do
     assigns =
       assign(assigns,
         attribute: attribute,
@@ -777,7 +1244,7 @@ defmodule AshAdmin.Components.Resource.Form do
         <textarea
           id={@id || @form.id <> "_#{@attribute.name}"}
           name={@name || @form.name <> "[#{@attribute.name}]"}
-          class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md resize-y"
+          class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md resize-y"
           phx-hook="MaintainAttrs"
           data-attrs="style"
           placeholder={placeholder(@default)}
@@ -787,9 +1254,21 @@ defmodule AshAdmin.Components.Resource.Form do
           type={text_input_type(@resource, @attribute)}
           id={@id || @form.id <> "_#{@attribute.name}"}
           value={value(@value, @form, @attribute)}
-          class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+          class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
           name={@name || @form.name <> "[#{@attribute.name}]"}
           placeholder={placeholder(@default)}
+        />
+      <% Map.has_key?(@attribute, :related_resource) && AshAdmin.Resource.label_field(@attribute.related_resource) -> %>
+        <.live_component
+          module={AshAdmin.Components.Resource.RelationshipField}
+          id={@id || "#{@form.name}-#{@attribute.name}"}
+          value={value(@value, @form, @attribute)}
+          tenant={@tenant}
+          actor={@actor}
+          authorizing={@authorizing}
+          resource={@attribute.related_resource}
+          form={@form}
+          attribute={@attribute}
         />
       <% true -> %>
         <.input
@@ -797,7 +1276,7 @@ defmodule AshAdmin.Components.Resource.Form do
           placeholder={placeholder(@default)}
           id={@id || @form.id <> "_#{@attribute.name}"}
           value={value(@value, @form, @attribute)}
-          class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+          class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
           name={@name || @form.name <> "[#{@attribute.name}]"}
         />
     <% end %>
@@ -829,7 +1308,7 @@ defmodule AshAdmin.Components.Resource.Form do
       type="number"
       id={@id || @form.id <> "_#{@attribute.name}"}
       value={value(@value, @form, @attribute)}
-      class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+      class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
       name={@name || @form.name <> "[#{@attribute.name}]"}
       placeholder={placeholder(@default)}
     />
@@ -845,6 +1324,24 @@ defmodule AshAdmin.Components.Resource.Form do
         id,
         _
       ) do
+    render_attribute_input(assigns, %{attribute | type: Ash.Type.Map}, form, value, name, id)
+  end
+
+  def render_attribute_input(
+        assigns,
+        %{type: Ash.Type.Struct} = attribute,
+        form,
+        value,
+        name,
+        id,
+        _
+      ) do
+    value =
+      case value(value, form, attribute) do
+        %_{} = struct -> Map.from_struct(struct)
+        other -> other
+      end
+
     render_attribute_input(assigns, %{attribute | type: Ash.Type.Map}, form, value, name, id)
   end
 
@@ -877,7 +1374,7 @@ defmodule AshAdmin.Components.Resource.Form do
         value={@encoded}
         name={@name || @form.name <> "[#{@attribute.name}]"}
         id={@id || @form.id <> "_#{@attribute.name}"}
-        class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+        class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
       />
     </div>
     """
@@ -889,7 +1386,7 @@ defmodule AshAdmin.Components.Resource.Form do
         disabled
         value="..."
         name={@name || @form.name <> "[#{@attribute.name}]"}
-        class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+        class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
       />
       """
   end
@@ -932,8 +1429,7 @@ defmodule AshAdmin.Components.Resource.Form do
          %AshPhoenix.Form{
            resource: AshPhoenix.Form.WrappedValue,
            data: %{value: %Ash.Union{type: type}}
-         }}
-        when type in [:string, :integer, :boolean] ->
+         }} ->
           type
 
         _ ->
@@ -952,19 +1448,10 @@ defmodule AshAdmin.Components.Resource.Form do
       end
 
     actual_union_type =
-      Keyword.get(attribute.constraints[:types], actual_union_type_name)[:type] || :string
+      Keyword.get(attribute.constraints[:types], actual_union_type_name)[:type] || Ash.Type.String
 
     actual_union_constraints =
-      Keyword.get(attribute.constraints[:types], actual_union_type_name)[:constraints] || :string
-
-    value =
-      case value do
-        %Ash.Union{type: :string, value: string_value} ->
-          string_value
-
-        _ ->
-          value
-      end
+      Keyword.get(attribute.constraints[:types], actual_union_type_name)[:constraints] || []
 
     {name, id} =
       if Ash.Type.embedded_type?(actual_union_type) do
@@ -1002,16 +1489,26 @@ defmodule AshAdmin.Components.Resource.Form do
         actual_union_type: actual_union_type,
         actual_union_constraints: actual_union_constraints,
         union_type_name: union_type_name,
-        actual_union_type_name: actual_union_type_name
+        actual_union_type_name: actual_union_type_name,
+        actual_union_value: value(value, form, attribute, attribute.default)
       )
 
     ~H"""
-    <div class="border">
-      <label class="block text-sm font-medium text-gray-700" for={@union_type_name}>
+    <div class={
+      if !is_nil(@actual_union_value),
+        do: "mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600",
+        else: ""
+    }>
+      <label
+        :if={!is_nil(@actual_union_value)}
+        class="block text-sm font-medium text-slate-700 dark:text-slate-300"
+        for={@union_type_name}
+      >
         Type
       </label>
       <div class="w-full">
         <.input
+          :if={not (is_nil(@actual_union_value) && map_type?(@actual_union_type))}
           phx-change="union-type-changed"
           id={@union_type_id}
           name={@union_type_name}
@@ -1024,7 +1521,7 @@ defmodule AshAdmin.Components.Resource.Form do
           assigns,
           %{@attribute | type: @actual_union_type, constraints: @actual_union_constraints},
           @form,
-          value(@value, @form, @attribute, @attribute.default),
+          @actual_union_value,
           @name,
           @id,
           @actual_union_type_name
@@ -1057,32 +1554,38 @@ defmodule AshAdmin.Components.Resource.Form do
           {render_fallback_attribute(assigns, @form, @attribute, @value, @name, @id, @union_type)}
         <% match?({:array, _}, @attribute.type) && Ash.Type.embedded_type?(@attribute.type) -> %>
           <.inputs_for :let={inner_form} field={@form[@attribute.name]}>
-            <.input
-              :for={kv <- inner_form.hidden}
-              name={inner_form.name <> "[#{elem(kv, 0)}]"}
-              value={elem(kv, 1)}
-              type="hidden"
-            />
-            <button
-              type="button"
-              phx-click="remove_form"
-              phx-target={@myself}
-              phx-value-path={inner_form.name}
-              class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-            >
-              <.icon name="hero-minus" class="h-4 w-4 text-gray-500" />
-            </button>
-
-            {render_attributes(
-              assigns,
-              inner_form.source.resource,
-              inner_form.source.source.action,
-              %{
-                inner_form
-                | id: nested_form_id(@id, @form.id, @attribute.name, inner_form),
-                  name: nested_form_name(@name, @form.name, @attribute.name, inner_form)
-              }
-            )}
+            <div class="mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Item {inner_form.index + 1}
+                </span>
+                <button
+                  type="button"
+                  phx-click="remove_form"
+                  phx-target={@myself}
+                  phx-value-path={inner_form.name}
+                  class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+                >
+                  <.icon name="hero-minus" class="h-3 w-3" /> Remove
+                </button>
+              </div>
+              <.input
+                :for={kv <- inner_form.hidden}
+                name={inner_form.name <> "[#{elem(kv, 0)}]"}
+                value={elem(kv, 1)}
+                type="hidden"
+              />
+              {render_attributes(
+                assigns,
+                inner_form.source.resource,
+                inner_form.source.source.action,
+                %{
+                  inner_form
+                  | id: nested_form_id(@id, @form.id, @attribute.name, inner_form),
+                    name: nested_form_name(@name, @form.name, @attribute.name, inner_form)
+                }
+              )}
+            </div>
           </.inputs_for>
           <button
             :if={can_append_embed?(@form.source, @attribute.name, @attribute.type)}
@@ -1092,38 +1595,44 @@ defmodule AshAdmin.Components.Resource.Form do
             phx-value-pkey={embedded_type_pkey(@attribute.type)}
             phx-value-union-type={@union_type}
             phx-value-path={@form.name <> "[#{@attribute.name}]"}
-            class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+            class="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
           >
-            <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
+            <.icon name="hero-plus" class="h-3 w-3" /> Add item
           </button>
         <% Ash.Type.embedded_type?(@attribute.type) && match?([%AshPhoenix.Form{} | _], @value) -> %>
-          <%= for inner_form <- Enum.map(@value, &to_form/1) do %>
-            <.input
-              :for={kv <- inner_form.hidden}
-              name={inner_form.name <> "[#{elem(kv, 0)}]"}
-              value={elem(kv, 1)}
-              type="hidden"
-            />
-            <button
-              type="button"
-              phx-click="remove_form"
-              phx-target={@myself}
-              phx-value-path={inner_form.name}
-              class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-            >
-              <.icon name="hero-minus" class="h-4 w-4 text-gray-500" />
-            </button>
-
-            {render_attributes(
-              assigns,
-              inner_form.source.resource,
-              inner_form.source.source.action,
-              %{
-                inner_form
-                | id: @id || @form.id <> "_#{@attribute.name}",
-                  name: @name || @form.name <> "[#{@attribute.name}]"
-              }
-            )}
+          <%= for {inner_form, idx} <- Enum.with_index(Enum.map(@value, &to_form/1)) do %>
+            <div class="mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Item {idx + 1}
+                </span>
+                <button
+                  type="button"
+                  phx-click="remove_form"
+                  phx-target={@myself}
+                  phx-value-path={inner_form.name}
+                  class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+                >
+                  <.icon name="hero-minus" class="h-3 w-3" /> Remove
+                </button>
+              </div>
+              <.input
+                :for={kv <- inner_form.hidden}
+                name={inner_form.name <> "[#{elem(kv, 0)}]"}
+                value={elem(kv, 1)}
+                type="hidden"
+              />
+              {render_attributes(
+                assigns,
+                inner_form.source.resource,
+                inner_form.source.source.action,
+                %{
+                  inner_form
+                  | id: @id || @form.id <> "_#{@attribute.name}",
+                    name: @name || @form.name <> "[#{@attribute.name}]"
+                }
+              )}
+            </div>
           <% end %>
           <button
             :if={can_append_embed?(@form.source, @attribute.name, @attribute.type)}
@@ -1133,48 +1642,30 @@ defmodule AshAdmin.Components.Resource.Form do
             phx-value-union-type={@union_type}
             phx-value-pkey={embedded_type_pkey(@attribute.type)}
             phx-value-path={@form.name <> "[#{@attribute.name}]"}
-            class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+            class="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
           >
-            <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
+            <.icon name="hero-plus" class="h-3 w-3" /> Add item
           </button>
         <% Ash.Type.embedded_type?(@attribute.type) && match?(%AshPhoenix.Form{}, @value) -> %>
           <% inner_form = to_form(@value) %>
-          <.input
-            :for={kv <- inner_form.hidden}
-            name={inner_form.name <> "[#{elem(kv, 0)}]"}
-            value={elem(kv, 1)}
-            type="hidden"
-          />
-          {render_attributes(
-            assigns,
-            inner_form.source.resource,
-            inner_form.source.source.action,
-            %{
-              inner_form
-              | id: @id || @form.id <> "_#{@attribute.name}",
-                name: @name || @form.name <> "[#{@attribute.name}]"
-            }
-          )}
-        <% Ash.Type.embedded_type?(@attribute.type) && match?(%{source: %AshPhoenix.FilterForm.Arguments{}}, @form) -> %>
-          {"AshPhoenix.FilterForm doesn't support embedded yet"}
-        <% Ash.Type.embedded_type?(@attribute.type) -> %>
-          <.inputs_for :let={inner_form} field={@form[@attribute.name]}>
+          <div class="mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+            <div class="flex items-center justify-end mb-2">
+              <button
+                type="button"
+                phx-click="remove_form"
+                phx-target={@myself}
+                phx-value-path={inner_form.name}
+                class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+              >
+                <.icon name="hero-minus" class="h-3 w-3" /> Remove
+              </button>
+            </div>
             <.input
               :for={kv <- inner_form.hidden}
               name={inner_form.name <> "[#{elem(kv, 0)}]"}
               value={elem(kv, 1)}
               type="hidden"
             />
-            <button
-              type="button"
-              phx-click="remove_form"
-              phx-target={@myself}
-              phx-value-path={inner_form.name}
-              class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
-            >
-              <.icon name="hero-minus" class="h-4 w-4 text-gray-500" />
-            </button>
-
             {render_attributes(
               assigns,
               inner_form.source.resource,
@@ -1185,6 +1676,40 @@ defmodule AshAdmin.Components.Resource.Form do
                   name: @name || @form.name <> "[#{@attribute.name}]"
               }
             )}
+          </div>
+        <% Ash.Type.embedded_type?(@attribute.type) && match?(%{source: %AshPhoenix.FilterForm.Arguments{}}, @form) -> %>
+          {"AshPhoenix.FilterForm doesn't support embedded yet"}
+        <% Ash.Type.embedded_type?(@attribute.type) -> %>
+          <.inputs_for :let={inner_form} field={@form[@attribute.name]}>
+            <div class="mt-3 ml-1 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+              <div class="flex items-center justify-end mb-2">
+                <button
+                  type="button"
+                  phx-click="remove_form"
+                  phx-target={@myself}
+                  phx-value-path={inner_form.name}
+                  class="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+                >
+                  <.icon name="hero-minus" class="h-3 w-3" /> Remove
+                </button>
+              </div>
+              <.input
+                :for={kv <- inner_form.hidden}
+                name={inner_form.name <> "[#{elem(kv, 0)}]"}
+                value={elem(kv, 1)}
+                type="hidden"
+              />
+              {render_attributes(
+                assigns,
+                inner_form.source.resource,
+                inner_form.source.source.action,
+                %{
+                  inner_form
+                  | id: @id || @form.id <> "_#{@attribute.name}",
+                    name: @name || @form.name <> "[#{@attribute.name}]"
+                }
+              )}
+            </div>
           </.inputs_for>
           <button
             :if={can_append_embed?(@form.source, @attribute.name, @attribute.type)}
@@ -1194,9 +1719,9 @@ defmodule AshAdmin.Components.Resource.Form do
             phx-value-union-type={@union_type}
             phx-value-pkey={embedded_type_pkey(@attribute.type)}
             phx-value-path={@form.name <> "[#{@attribute.name}]"}
-            class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+            class="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
           >
-            <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
+            <.icon name="hero-plus" class="h-3 w-3" /> Add item
           </button>
         <% is_atom(@attribute.type) && function_exported?(@attribute.type, :values, 0) -> %>
           <.input
@@ -1242,6 +1767,9 @@ defmodule AshAdmin.Components.Resource.Form do
     name = name || form.name <> "[#{attribute.name}]"
     id = id || form.id <> "_#{attribute.name}"
 
+    # normalize array items for rendering and Sortable row metadata
+    fallback_list = list_value(value || value(value, form, attribute))
+
     assigns =
       assign(assigns,
         form: form,
@@ -1250,35 +1778,58 @@ defmodule AshAdmin.Components.Resource.Form do
         value: value,
         name: name,
         id: id,
-        union_type: union_type || default_union_type(type, attribute.constraints[:items] || [])
+        union_type: union_type || default_union_type(type, attribute.constraints[:items] || []),
+        fallback_list: fallback_list
       )
 
     ~H"""
     <div>
-      <div :for={
-        {this_value, index} <-
-          Enum.with_index(list_value(@value || value(@value, @form, @attribute)))
-      }>
-        {render_attribute_input(
-          assigns,
-          %{@attribute | type: @type, constraints: @attribute.constraints[:items] || []},
-          @form,
-          {:list_value, this_value},
-          @name <> "[#{index}]",
-          @id <> "_#{index}",
-          @union_type
-        )}
-        <button
-          type="button"
-          phx-click="remove_value"
-          phx-target={@myself}
-          phx-value-path={@form.name}
-          phx-value-field={@attribute.name}
-          phx-value-index={index}
-          class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+      <%!-- Sortable.js container: hook reads data-path/field and row data-sort-index values --%>
+      <div
+        id={@id <> "_sortable_list"}
+        phx-hook="Sortable"
+        phx-target={@myself}
+        data-path={@form.name}
+        data-field={@attribute.name}
+      >
+        <div
+          :for={{this_value, index} <- Enum.with_index(@fallback_list)}
+          data-sortable="true"
+          data-sort-index={index}
+          class="flex items-start gap-2 mt-1"
         >
-          <.icon name="hero-minus" class="h-4 w-4 text-gray-500" />
-        </button>
+          <%!-- grip handle only; inputs stay editable outside the drag handle --%>
+          <button
+            type="button"
+            data-sort-handle="true"
+            class="inline-flex items-center mt-1 p-1 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing rounded"
+            aria-label="Drag to reorder"
+          >
+            <.icon name="hero-bars-3" class="h-4 w-4" />
+          </button>
+          <div class="flex-1">
+            {render_attribute_input(
+              assigns,
+              %{@attribute | type: @type, constraints: @attribute.constraints[:items] || []},
+              @form,
+              {:list_value, this_value},
+              @name <> "[#{index}]",
+              @id <> "_#{index}",
+              @union_type
+            )}
+          </div>
+          <button
+            type="button"
+            phx-click="remove_value"
+            phx-target={@myself}
+            phx-value-path={@form.name}
+            phx-value-field={@attribute.name}
+            phx-value-index={index}
+            class="inline-flex items-center gap-1 mt-1 px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded"
+          >
+            <.icon name="hero-minus" class="h-3 w-3" /> Remove
+          </button>
+        </div>
       </div>
       <button
         type="button"
@@ -1287,29 +1838,17 @@ defmodule AshAdmin.Components.Resource.Form do
         phx-value-path={@form.name}
         phx-value-field={@attribute.name}
         phx-value-union-type={@union_type}
-        class="flex h-6 w-6 mt-2 border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+        class="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-300 dark:border-slate-600"
       >
-        <.icon name="hero-plus" class="h-4 w-4 text-gray-500" />
+        <.icon name="hero-plus" class="h-3 w-3" /> Add item
       </button>
     </div>
     """
   end
 
   defp render_fallback_attribute(assigns, form, attribute, value, name, id, _union_type) do
-    casted_value =
-      case value(value, form, attribute) do
-        %AshPhoenix.Form{resource: AshPhoenix.Form.WrappedValue} = form ->
-          form
-          |> AshPhoenix.Form.value(:value)
-          |> Phoenix.HTML.Safe.to_iodata()
-
-        value ->
-          Phoenix.HTML.Safe.to_iodata(value)
-      end
-
     assigns =
       assign(assigns,
-        casted_value: casted_value,
         form: form,
         attribute: attribute,
         value: value,
@@ -1321,10 +1860,10 @@ defmodule AshAdmin.Components.Resource.Form do
     <.input
       type={text_input_type(@form.source.resource, @attribute)}
       placeholder={placeholder(@attribute.default)}
-      value={@casted_value}
+      value={value(@value, @form, @attribute, @attribute.default)}
       name={@name || @form.name <> "[#{@attribute.name}]"}
       id={@id || @form.id <> "_#{@attribute.name}"}
-      class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+      class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
     />
     """
   rescue
@@ -1337,10 +1876,10 @@ defmodule AshAdmin.Components.Resource.Form do
           <.input
             type={text_input_type(@form.source.resource, @attribute)}
             placeholder={placeholder(@attribute.default)}
-            value={@value}
+            value={value(@value, @form, @attribute, @attribute.default)}
             name={@name || @form.name <> "[#{@attribute.name}]"}
             id={@id || @form.id <> "_#{@attribute.name}"}
-            class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+            class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
           />
           """
 
@@ -1352,7 +1891,7 @@ defmodule AshAdmin.Components.Resource.Form do
             value="..."
             name={@name || @form.name <> "[#{@attribute.name}]"}
             id={@id || @form.id <> "_#{@attribute.name}"}
-            class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+            class="mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
           />
           """
       end
@@ -1411,15 +1950,25 @@ defmodule AshAdmin.Components.Resource.Form do
     |> Enum.join("-")
   end
 
-  defp value(value, form, attribute, default \\ nil)
+  defp value(value, form, attribute, default \\ nil) do
+    case do_value(value, form, attribute, default) do
+      %AshPhoenix.Form{resource: AshPhoenix.Form.WrappedValue} = form ->
+        form
+        |> AshPhoenix.Form.value(:value)
+        |> Phoenix.HTML.Safe.to_iodata()
 
-  defp value({:list_value, %Ash.Union{value: value}}, _, _, _), do: value
-  defp value({:list_value, value}, _, _, _), do: value
+      value ->
+        value
+    end
+  end
 
-  defp value(%Ash.Union{value: value}, _form, _attribute, _) when not is_nil(value), do: value
-  defp value(value, _form, _attribute, _) when not is_nil(value), do: value
+  defp do_value({:list_value, %Ash.Union{value: value}}, _, _, _), do: value
+  defp do_value({:list_value, value}, _, _, _), do: value
 
-  defp value(
+  defp do_value(%Ash.Union{value: value}, _form, _attribute, _) when not is_nil(value), do: value
+  defp do_value(value, _form, _attribute, _) when not is_nil(value), do: value
+
+  defp do_value(
          _value,
          %{source: %AshPhoenix.FilterForm.Arguments{} = arguments},
          %{name: attribute_name},
@@ -1433,7 +1982,7 @@ defmodule AshAdmin.Components.Resource.Form do
     end
   end
 
-  defp value(_value, %{source: form}, attribute, _default) do
+  defp do_value(_value, %{source: form}, attribute, _default) do
     case AshPhoenix.Form.value(form, attribute.name) do
       %Ash.Union{value: value} -> value
       value -> value
@@ -1490,7 +2039,7 @@ defmodule AshAdmin.Components.Resource.Form do
        socket
        |> redirect(
          to:
-           "#{socket.assigns.prefix || "/"}?domain=#{AshAdmin.Domain.name(socket.assigns.domain)}&resource=#{AshAdmin.Resource.name(socket.assigns.resource)}&table=#{socket.assigns.table}&primary_key=#{encode_primary_key(record)}"
+           "#{socket.assigns.prefix || "/"}?domain=#{AshAdmin.Domain.name(socket.assigns.domain)}&resource=#{AshAdmin.Resource.name(socket.assigns.resource)}&table=#{socket.assigns.table}&primary_key=#{encode_primary_key(record)}&action_type=read"
        )}
     else
       case AshAdmin.Helpers.primary_action(socket.assigns.resource, :update) do
@@ -1585,6 +2134,8 @@ defmodule AshAdmin.Components.Resource.Form do
   end
 
   def handle_event("add_form", %{"path" => path} = params, socket) do
+    AshPhoenix.Form.params(socket.assigns.form)
+
     type =
       case params["type"] do
         "lookup" -> :read
@@ -1603,7 +2154,8 @@ defmodule AshAdmin.Components.Resource.Form do
 
     {:noreply,
      socket
-     |> assign(:form, form)}
+     |> assign(:form, form)
+     |> allow_uploading_form_arguments()}
   end
 
   def handle_event("remove_form", %{"path" => path}, socket) do
@@ -1618,7 +2170,7 @@ defmodule AshAdmin.Components.Resource.Form do
     to_append =
       case params["union-type"] do
         nil -> nil
-        value when value != "" -> %{"_union_type" => value}
+        value when value not in ["", nil] -> %{"_union_type" => value}
         _ -> nil
       end
 
@@ -1716,6 +2268,24 @@ defmodule AshAdmin.Components.Resource.Form do
      |> assign(:form, form)}
   end
 
+  # handle drag-and-drop reorder events from the Sortable.js LiveView hook
+  def handle_event(
+        "update_array_sorting",
+        %{"path" => path, "field" => field, "indices" => indices},
+        socket
+      ) do
+    form =
+      AshPhoenix.Form.update_form(
+        socket.assigns.form,
+        path,
+        &sort_array_value(&1, field, indices)
+      )
+
+    {:noreply,
+     socket
+     |> assign(:form, form)}
+  end
+
   def handle_event("save", %{"form" => form_params}, socket) do
     form = socket.assigns.form
 
@@ -1725,7 +2295,13 @@ defmodule AshAdmin.Components.Resource.Form do
       |> Map.put(:actor, socket.assigns[:actor])
     end
 
-    params = form_params |> replace_new_union_stubs() |> replace_unused()
+    socket = consume_file_uploads(socket)
+
+    params =
+      form_params
+      |> replace_new_union_stubs()
+      |> replace_unused()
+      |> add_file_uploads(socket.assigns.uploaded_files)
 
     case AshPhoenix.Form.submit(form,
            before_submit: before_submit,
@@ -1748,6 +2324,13 @@ defmodule AshAdmin.Components.Resource.Form do
     end
   end
 
+  def handle_event("remove_upload", %{"upload-key" => upload_key}, socket) do
+    {:noreply,
+     update(socket, :uploaded_files, fn uploaded_files ->
+       Map.delete(uploaded_files, upload_key)
+     end)}
+  end
+
   def handle_event("validate", %{"form" => params} = event, socket) do
     params =
       params
@@ -1757,10 +2340,61 @@ defmodule AshAdmin.Components.Resource.Form do
     form =
       AshPhoenix.Form.validate(socket.assigns.form, params,
         only_touched?: true,
-        target: event["_target"]
+        target: event["_target"] || []
       )
 
     {:noreply, assign(socket, form: form)}
+  end
+
+  # sobelow_skip ["Traversal.FileModule"]
+  defp consume_file_uploads(socket) do
+    uploaded_files =
+      socket.assigns[:uploads]
+      |> case do
+        nil -> %{}
+        uploads -> uploads
+      end
+      |> Enum.filter(fn {_, upload_config} ->
+        is_struct(upload_config, Phoenix.LiveView.UploadConfig)
+      end)
+      |> Enum.flat_map(fn {name, _} ->
+        consume_uploaded_entries(socket, name, fn %{path: path}, entry ->
+          random_string = for _ <- 1..10, into: "", do: <<Enum.random(~c"0123456789abcdef")>>
+
+          tmp_dir = Path.join([System.tmp_dir!(), random_string])
+          # `entry.client_name` is the browser-supplied filename; strip any path
+          # components so a name like `../../etc/x` cannot escape tmp_dir.
+          tmp_file = Path.join([tmp_dir, Path.basename(entry.client_name)])
+
+          File.mkdir_p!(tmp_dir)
+          File.cp!(path, tmp_file)
+
+          {:ok, {entry.upload_config, Ash.Type.File.from_path(tmp_file)}}
+        end)
+      end)
+      |> Enum.into(%{})
+
+    update(socket, :uploaded_files, fn existing_files ->
+      Map.merge(existing_files, uploaded_files)
+    end)
+  end
+
+  defp add_file_uploads(form_params, uploaded_files) do
+    Enum.reduce(uploaded_files, form_params, fn {param_path, file}, params ->
+      update_params_with_path(params, param_path, file)
+    end)
+  end
+
+  defp update_params_with_path(params, path, value) do
+    path = String.trim_leading(path, "form")
+
+    path =
+      path
+      |> String.replace("[", "")
+      |> String.split("]")
+      |> Enum.reject(&(&1 == ""))
+
+    put_in(params, Enum.map(path, &Access.key(&1, %{})), value)
   end
 
   defp replace_new_union_stubs(value) when is_list(value) do
@@ -1874,6 +2508,18 @@ defmodule AshAdmin.Components.Resource.Form do
     AshPhoenix.Form.validate(form, new_params)
   end
 
+  # apply a new row order to array field params and re-validate the form
+  defp sort_array_value(form, field, indices) do
+    new_value =
+      form
+      |> AshPhoenix.Form.value(String.to_existing_atom(field))
+      |> AshAdmin.Helpers.reorder_by_indices(indices)
+
+    new_params = Map.put(form.raw_params, field, new_value)
+
+    AshPhoenix.Form.validate(form, new_params)
+  end
+
   defp append_to_and_map(list, value) do
     list
     |> Enum.concat([value])
@@ -1924,6 +2570,7 @@ defmodule AshAdmin.Components.Resource.Form do
 
   def attributes(resource, %Ash.Resource.Calculation{arguments: arguments}, _exacly) do
     sort_attributes(arguments, resource)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, %{type: :read, arguments: arguments}, exactly)
@@ -1934,10 +2581,12 @@ defmodule AshAdmin.Components.Resource.Form do
     |> Enum.concat(arguments)
     |> Enum.filter(&(&1.name in exactly))
     |> sort_attributes(resource)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, %{type: :read, arguments: arguments}, _) do
     sort_attributes(arguments, resource)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, nil, exactly) when not is_nil(exactly) do
@@ -1945,6 +2594,7 @@ defmodule AshAdmin.Components.Resource.Form do
     |> Ash.Resource.Info.attributes()
     |> Enum.filter(&(&1.name in exactly))
     |> sort_attributes(resource)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, :show, _) do
@@ -1952,12 +2602,14 @@ defmodule AshAdmin.Components.Resource.Form do
     |> Ash.Resource.Info.attributes()
     |> Enum.reject(&(&1.name == :autogenerated_id))
     |> sort_attributes(resource)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, %{type: :destroy} = action, _) do
     action.arguments
     |> Enum.filter(& &1.public?)
     |> sort_attributes(resource, action)
+    |> relate_attributes(resource)
   end
 
   def attributes(resource, action, _) do
@@ -1978,6 +2630,7 @@ defmodule AshAdmin.Components.Resource.Form do
     attributes
     |> Enum.concat(arguments)
     |> sort_attributes(resource, action)
+    |> relate_attributes(resource)
   end
 
   defp sort_attributes(attributes, resource, action \\ nil) do
@@ -2025,7 +2678,7 @@ defmodule AshAdmin.Components.Resource.Form do
           # short text goes at the top
           not short_text?(resource, attribute),
           # Other strings go at the bottom
-          attribute.type in [Ash.Type.CiString, Ash.Type.String, Ash.Type.UUID]
+          attribute.type in [Ash.Type.CiString, Ash.Type.String, Ash.Type.UUID, Ash.Type.UUIDv7]
         }
       end)
 
@@ -2038,6 +2691,58 @@ defmodule AshAdmin.Components.Resource.Form do
       )
 
     {auto_sorted, flags, sorted_defaults, relationship_args}
+  end
+
+  defp relate_attributes({auto_sorted, flags, sorted_defaults, relationship_args}, resource) do
+    auto_sorted_with_relationships =
+      Enum.map(auto_sorted, fn
+        %Ash.Resource.Attribute{} = attribute ->
+          relationships = Ash.Resource.Info.relationships(resource)
+
+          if attribute.primary_key? do
+            case Enum.find(relationships, fn
+                   %Ash.Resource.Relationships.BelongsTo{destination_attribute: dest_attr} ->
+                     dest_attr == attribute.name
+
+                   _other ->
+                     false
+                 end) do
+              %{source: source} -> Map.put(attribute, :related_resource, source)
+              _ -> attribute
+            end
+          else
+            case Enum.find(relationships, fn
+                   %Ash.Resource.Relationships.BelongsTo{source_attribute: src_attr} ->
+                     src_attr == attribute.name
+
+                   _other ->
+                     false
+                 end) do
+              %{destination: destination} -> Map.put(attribute, :related_resource, destination)
+              _ -> attribute
+            end
+          end
+
+        attribute ->
+          attribute
+      end)
+
+    {auto_sorted_with_relationships, flags, sorted_defaults, relationship_args}
+  end
+
+  defp apply_enrichments(result, enrichments) when enrichments == %{}, do: result
+
+  defp apply_enrichments({auto_sorted, flags, sorted_defaults, relationship_args}, enrichments) do
+    enrich = fn attributes ->
+      Enum.map(attributes, fn attribute ->
+        case Map.get(enrichments, attribute.name) do
+          nil -> attribute
+          override -> Map.merge(attribute, override)
+        end
+      end)
+    end
+
+    {enrich.(auto_sorted), enrich.(flags), enrich.(sorted_defaults), relationship_args}
   end
 
   defp map_type?({:array, type}) do
@@ -2073,7 +2778,6 @@ defmodule AshAdmin.Components.Resource.Form do
     end
   end
 
-  defp only_accepted(attributes, %{type: :read}), do: attributes
   defp only_accepted(_, %{type: :action}), do: []
 
   defp only_accepted(attributes, %{accept: accept}) do
@@ -2114,42 +2818,93 @@ defmodule AshAdmin.Components.Resource.Form do
         include_non_map_types?: true
       )
 
+    form_opts = [
+      actor: socket.assigns[:actor],
+      authorize?: socket.assigns[:authorizing],
+      context: %{ash_admin?: true},
+      domain: socket.assigns.domain,
+      forms: auto_forms,
+      tenant: socket.assigns[:tenant],
+      transform_errors: transform_errors
+    ]
+
     form =
       case socket.assigns.action.type do
         :create ->
           socket.assigns.resource
-          |> AshPhoenix.Form.for_create(socket.assigns.action.name,
-            domain: socket.assigns.domain,
-            actor: socket.assigns[:actor],
-            authorize?: socket.assigns[:authorizing],
-            forms: auto_forms,
-            transform_errors: transform_errors,
-            tenant: socket.assigns[:tenant]
-          )
+          |> AshPhoenix.Form.for_create(socket.assigns.action.name, form_opts)
 
         :update ->
           socket.assigns.record
-          |> AshPhoenix.Form.for_update(socket.assigns.action.name,
-            domain: socket.assigns.domain,
-            forms: auto_forms,
-            actor: socket.assigns[:actor],
-            authorize?: socket.assigns[:authorizing],
-            transform_errors: transform_errors,
-            tenant: socket.assigns[:tenant]
-          )
+          |> AshPhoenix.Form.for_update(socket.assigns.action.name, form_opts)
 
         :destroy ->
           socket.assigns.record
-          |> AshPhoenix.Form.for_destroy(socket.assigns.action.name,
-            domain: socket.assigns.domain,
-            forms: auto_forms,
-            actor: socket.assigns[:actor],
-            authorize?: socket.assigns[:authorizing],
-            transform_errors: transform_errors,
-            tenant: socket.assigns[:tenant]
-          )
+          |> AshPhoenix.Form.for_destroy(socket.assigns.action.name, form_opts)
       end
 
     assign(socket, :form, form |> to_form())
   end
+
+  defp collect_forms_recursively(%AshPhoenix.Form{} = form) do
+    collect_recursive(form, [])
+  end
+
+  defp collect_recursive(form, acc) do
+    acc = [form | acc]
+
+    children = List.flatten(Map.values(form.forms))
+
+    Enum.reduce(children, acc, fn child, acc ->
+      collect_recursive(child, acc)
+    end)
+  end
+
+  defp uploadable_arguments(form) do
+    Enum.filter(form.source.action.arguments, fn %{type: type} -> type == Ash.Type.File end)
+  end
+
+  defp allow_uploading_form_arguments(socket) do
+    socket.assigns.form.source
+    |> collect_forms_recursively()
+    |> Enum.flat_map(fn form ->
+      form
+      |> uploadable_arguments()
+      |> Enum.map(fn argument ->
+        %{
+          upload_key: upload_key(form, argument),
+          field: AshAdmin.Resource.field(form.resource, argument.name)
+        }
+      end)
+    end)
+    |> Enum.reduce(socket, fn %{upload_key: upload_key, field: field}, socket ->
+      field = field || %{accepted_extensions: :any, max_file_size: 8_000_000}
+
+      if upload_allowed?(socket, upload_key) do
+        socket
+      else
+        allow_upload(socket, upload_key,
+          accept: field.accepted_extensions || :any,
+          # 8 megabyte (SI) default
+          max_file_size: field.max_file_size || 8_000_000
+        )
+      end
+    end)
+  end
+
+  defp upload_allowed?(socket, upload_key) do
+    Map.get(socket.assigns, :uploads, %{})[upload_key]
+  end
+
+  defp upload_key(form, %Ash.Resource.Actions.Argument{name: name}) do
+    "#{form.name}[#{name}]"
+  end
+
+  defp upload_key(form, %Ash.Resource.Attribute{name: name}) do
+    "#{form.name}[#{name}]"
+  end
+
+  defp error_to_string(:too_large), do: "The file is too large"
+  defp error_to_string(:too_many_files), do: "You have selected too many files"
+  defp error_to_string(:not_accepted), do: "You have selected an unacceptable file type"
 end

@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.ActorPlug.Plug do
   @moduledoc false
   @behaviour AshAdmin.ActorPlug
@@ -121,7 +126,8 @@ defmodule AshAdmin.ActorPlug.Plug do
       if domain do
         domain
         |> AshAdmin.Domain.show_resources()
-        |> Enum.find(&(AshAdmin.Resource.name(&1) == resource))
+        # The actor picker must only load resources actually designated as actors.
+        |> Enum.find(&(AshAdmin.Resource.name(&1) == resource && AshAdmin.Resource.actor?(&1)))
       end
 
     case resource && decode_primary_key(resource, primary_key) do
@@ -131,9 +137,12 @@ defmodule AshAdmin.ActorPlug.Plug do
             Ash.Resource.Info.action(resource, String.to_existing_atom(action), :read)
           end
 
+        actor_load = AshAdmin.Resource.actor_load(resource)
+
         resource
         |> Ash.Query.filter(^filter)
         |> Ash.Query.set_tenant(tenant)
+        |> Ash.Query.load(actor_load)
         |> Ash.read_one!(action: action, authorize?: false, domain: domain)
 
       _ ->

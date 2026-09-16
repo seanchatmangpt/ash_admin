@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Test.PageLiveTest do
   use ExUnit.Case, async: false
 
@@ -24,15 +28,29 @@ defmodule AshAdmin.Test.PageLiveTest do
     assert html =~ "String"
   end
 
-  test "embeds default csp nonces" do
+  test "generates a fresh per-request csp nonce (never the old published constant)" do
     html =
       build_conn()
       |> get("/api/admin")
       |> html_response(200)
 
-    assert html =~ "ash_admin-Ed55GFnX"
-    assert html =~ ~s|<script nonce="ash_admin-Ed55GFnX"|
-    assert html =~ ~s|<style nonce="ash_admin-Ed55GFnX"|
+    # The previously hardcoded, publicly-known nonce must be gone.
+    refute html =~ "ash_admin-Ed55GFnX"
+
+    [_, style_nonce] = Regex.run(~r/<style nonce="([^"]+)"/, html)
+    [_, script_nonce] = Regex.run(~r/<script nonce="([^"]+)"/, html)
+
+    # A real, non-trivial nonce is emitted and shared by the inline tags.
+    assert byte_size(style_nonce) >= 16
+    assert style_nonce == script_nonce
+    assert html =~ ~s|<meta name="csp-nonce-style" content="#{style_nonce}"|
+
+    # And it is random per request.
+    other =
+      build_conn() |> get("/api/admin") |> html_response(200)
+
+    [_, other_nonce] = Regex.run(~r/<style nonce="([^"]+)"/, other)
+    refute other_nonce == style_nonce
   end
 
   test "embeds user selected csp nonces" do
@@ -44,7 +62,6 @@ defmodule AshAdmin.Test.PageLiveTest do
 
     assert html =~ ~s|<script nonce="csp_nonce"|
     assert html =~ ~s|<style nonce="csp_nonce"|
-    assert html =~ ~s|<link nonce="csp_nonce"|
     refute html =~ "ash_admin-Ed55GFnX"
 
     html =
@@ -56,7 +73,108 @@ defmodule AshAdmin.Test.PageLiveTest do
 
     assert html =~ ~s|<script nonce="script_nonce"|
     assert html =~ ~s|<style nonce="style_nonce"|
-    assert html =~ ~s|<link nonce="style_nonce"|
     refute html =~ "ash_admin-Ed55GFnX"
+  end
+
+  test "allows uploading to an action with an upload argument", %{conn: conn} do
+    {:ok, view, _html} =
+      live(
+        conn,
+        "/api/admin?domain=Domain&resource=Post&action_type=create&action=create_with_photo"
+      )
+
+    file = File.read!("./logos/small-logo.png")
+
+    photo =
+      file_input(view, "#form", "form[photo]", [
+        %{
+          last_modified: 1_551_913_980,
+          name: "small-logo.png",
+          content: file,
+          size: byte_size(file),
+          type: "image/png"
+        }
+      ])
+
+    assert view
+           |> form("#form", user: %{})
+           |> render_change(photo) =~ "data-progress=\"0\""
+
+    assert render_upload(photo, "small-logo.png") =~ "data-progress=\"100\""
+  end
+
+  test "allows uploading to a related resource with an upload argument", %{conn: conn} do
+    {:ok, view, _html} =
+      live(
+        conn,
+        "/api/admin?domain=Domain&resource=Post&action_type=create&action=create_with_photo"
+      )
+
+    file = File.read!("./logos/small-logo.png")
+
+    assert view
+           |> element(~s{[phx-value-path="form[comments]"][phx-value-type="create"]})
+           |> render_click()
+
+    photo =
+      file_input(view, "#form", "form[comments][0][photo]", [
+        %{
+          last_modified: 1_551_913_980,
+          name: "small-logo.png",
+          content: file,
+          size: byte_size(file),
+          type: "image/png"
+        }
+      ])
+
+    assert view
+           |> form("#form", user: %{})
+           |> render_change(photo) =~ "data-progress=\"0\""
+
+    assert render_upload(photo, "small-logo.png") =~ "data-progress=\"100\""
+  end
+
+  test "a nullable boolean argument renders a select with a nil option", %{conn: conn} do
+    {:ok, view, _html} =
+      live(
+        conn,
+        "/api/admin?domain=Domain&resource=Post&action_type=create&action=create_with_flag"
+      )
+
+    html = view |> element("select[name='form[flag]']") |> render()
+
+    assert html =~ ~s|<option value="">-</option>|
+    assert html =~ ~s|<option value="true">True</option>|
+    assert html =~ ~s|<option value="false">False</option>|
+  end
+
+  # simulates the Sortable.js hook pushing update_array_sorting after a drag reorder
+  test "allows reordering primitive array items via drag-and-drop sorting", %{conn: conn} do
+    {:ok, view, _html} =
+      live(conn, "/api/admin?domain=Test&resource=Post&action_type=create")
+
+    view
+    |> element("button[phx-click='append_value'][phx-value-field='tags']")
+    |> render_click()
+
+    view
+    |> element("button[phx-click='append_value'][phx-value-field='tags']")
+    |> render_click()
+
+    view
+    |> form("#form", %{"form" => %{"tags" => %{"0" => "first", "1" => "second"}}})
+    |> render_change()
+
+    # render_hook stands in for the client-side Sortable onEnd callback
+    view
+    |> element("#form_tags_sortable_list")
+    |> render_hook("update_array_sorting", %{
+      "path" => "form",
+      "field" => "tags",
+      "indices" => ["1", "0"]
+    })
+
+    assert has_element?(view, "input[name='form[tags][0]'][value='second']")
+    assert has_element?(view, "input[name='form[tags][1]'][value='first']")
   end
 end

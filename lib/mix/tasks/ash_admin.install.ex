@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Mix.Tasks.AshAdmin.Install.Docs do
   @moduledoc false
 
@@ -87,23 +92,55 @@ if Code.ensure_loaded?(Igniter) do
 
     defp add_to_router(igniter, app_name, router) do
       if router do
-        Igniter.Project.Module.find_and_update_module!(igniter, router, fn zipper ->
+        {igniter, has_browser_pipeline?} =
+          Igniter.Libs.Phoenix.has_pipeline(igniter, router, :browser)
+
+        igniter
+        |> Igniter.Project.Module.find_and_update_module!(router, fn zipper ->
           zipper =
-            Igniter.Code.Common.add_code(
-              zipper,
-              """
-              if Application.compile_env(#{inspect(app_name)}, :dev_routes) do
-                import AshAdmin.Router
+            case Igniter.Code.Common.move_to(
+                   zipper,
+                   &Igniter.Code.Function.function_call?(&1, :ash_admin, [1, 2])
+                 ) do
+              :error ->
+                code =
+                  if has_browser_pipeline? do
+                    """
+                    if Application.compile_env(#{inspect(app_name)}, :dev_routes) do
+                      import AshAdmin.Router
 
-                scope "/admin" do
-                  pipe_through :browser
+                      scope "/admin" do
+                        pipe_through :browser
 
-                  ash_admin "/"
-                end
-              end
-              """,
-              placement: :after
-            )
+                        ash_admin "/"
+                      end
+                    end
+                    """
+                  else
+                    """
+                    if Application.compile_env(#{inspect(app_name)}, :dev_routes) do
+                      import AshAdmin.Router
+
+                      admin_browser_pipeline :browser
+
+                      scope "/admin" do
+                        pipe_through :browser
+
+                        ash_admin "/"
+                      end
+                    end
+                    """
+                  end
+
+                Igniter.Code.Common.add_code(
+                  zipper,
+                  code,
+                  placement: :after
+                )
+
+              _ ->
+                zipper
+            end
 
           {:ok, zipper}
         end)

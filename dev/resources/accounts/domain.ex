@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule Demo.Accounts.Domain do
   @moduledoc false
   use Ash.Domain,
@@ -9,5 +14,9 @@ defmodule Demo.Accounts.Domain do
 
   resources do
     resource Demo.Accounts.User
+    resource Demo.Accounts.Office
+    resource Demo.Accounts.Membership
+    resource Demo.Accounts.OfficeLink
+    resource Demo.Accounts.Calculator
   end
 end

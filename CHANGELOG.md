@@ -1,9 +1,435 @@
+<!--
+SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs.contributors>
+
+SPDX-License-Identifier: MIT
+-->
+
 # Change Log
 
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](Https://conventionalcommits.org) for commit guidelines.
 
 <!-- changelog -->
+
+## [v1.3.2](https://github.com/ash-project/ash_admin/compare/v1.3.1...v1.3.2) (2026-09-04)
+
+
+
+
+### Bug Fixes:
+
+* properly thread through actor to typeaheads by Zach Daniel
+
+* handle labels in typeaheads better for searching by Zach Daniel
+
+## [v1.3.1](https://github.com/ash-project/ash_admin/compare/v1.3.0...v1.3.1) (2026-08-31)
+
+
+
+
+### Bug Fixes:
+
+* match admin session cookies by exact name (cookie shadowing) (CVE-2026-75757) by Zach Daniel
+
+* generate a per-request CSP nonce instead of a published constant (CVE-2026-81852) by Zach Daniel
+
+* reject non-primary-key fields when decoding composite primary keys (filter oracle) (CVE-2026-81853) by Zach Daniel
+
+* strip path components from uploaded file names (path traversal) (CVE-2026-82673) by Zach Daniel
+
+* URL-encode admin row-action link parameters (query-parameter injection) (CVE-2026-82681) by Zach Daniel
+
+* HTML-escape relationship typeahead labels before highlighting (stored XSS) (CVE-2026-77850) by Zach Daniel
+
+* don't intern atoms from client input in set_actor and calculate events (CVE-2026-82722) by Zach Daniel
+
+* constrain the admin actor picker to resources marked as actors by Zach Daniel
+
+* parse TypedStruct as map in forms for update actions by Amish Patel
+
+* handle nil values when rendering AshTypedStructures by Guilherme Bordallo
+
+## [v1.3.0](https://github.com/ash-project/ash_admin/compare/v1.2.0...v1.3.0) (2026-08-12)
+
+
+
+
+### Features:
+
+* parse struct as map and render as json by Guilherme Bordallo
+
+### Bug Fixes:
+
+* apply the ash binary issue fix to ash_admin as well by Zach Daniel
+
+* pass actor, authorize?, and tenant in RelationshipField reads by Alec Hartung
+
+## [v1.2.0](https://github.com/ash-project/ash_admin/compare/v1.1.0...v1.2.0) (2026-07-20)
+
+
+
+
+### Features:
+
+* Add drag-and-drop reordering for primitive array fields in forms (#407) by JoyceJ53
+
+### Bug Fixes:
+
+* support tenant option labels (#406) by Jakub Skałecki
+
+* Ensure mobile and desktiop sidebar ids are unique (#404) by capoccias
+
+* update for LV 1.2.0 by Zach Daniel
+
+* format array attribtues in ash_admin by Zach Daniel
+
+### Improvements:
+
+* add support for uuidv7 primary keys (#413) by StephanH90
+
+## [v1.1.0](https://github.com/ash-project/ash_admin/compare/v1.0.0-rc.0...v1.1.0) (2026-04-13)
+### Breaking Changes:
+
+* completely rework the UI w/ dark mode by Zach Daniel
+
+
+
+### Bug Fixes:
+
+* use Code.ensure_loaded? before checking if function exported by Zach Daniel
+
+## [v1.0.0-rc.0](https://github.com/ash-project/ash_admin/compare/v0.14.0...v1.0.0-rc.0) (2026-03-02)
+### Breaking Changes:
+
+* completely rework the UI w/ dark mode by Zach Daniel
+
+
+
+### Bug Fixes:
+
+* handle missing browser pipeline in installation by Zach Daniel
+
+* Remove custom ID from Cinder tables that had dots in it from the resource module name (#381) by sevenseacat
+
+### Improvements:
+
+* rework json and markdown editors for CSP compliance by Zach Daniel
+
+* add forbidden banner by Zach Daniel
+
+* support typeahead/pills for many cardinality relationships by Zach Daniel
+
+* add list_tenants logic by Zach Daniel
+
+## [v0.14.0](https://github.com/ash-project/ash_admin/compare/v0.13.26...v0.14.0) (2026-02-11)
+
+
+
+
+### Features:
+
+* Redo of Cinder integration (#380) by sevenseacat
+
+## [v0.13.26](https://github.com/ash-project/ash_admin/compare/v0.13.25...v0.13.26) (2026-02-11)
+
+
+
+
+### Improvements:
+
+* incoporate sevenseacat theme into cinder table for consistent styling and enhanced features by Zach Daniel
+
+## [v0.13.25](https://github.com/ash-project/ash_admin/compare/v0.13.24...v0.13.25) (2026-02-11)
+
+
+
+
+### Bug Fixes:
+
+* pass authorizing and show_filters to CinderTable by Zach Daniel
+
+### Improvements:
+
+* Add :datetime_step form field configuration (#376) by capoccias
+
+## [v0.13.24](https://github.com/ash-project/ash_admin/compare/v0.13.23...v0.13.24) (2025-12-05)
+
+
+
+
+### Bug Fixes:
+
+* remove load from expr calc because it now shows a warning in ash by Barnabas Jovanovics
+
+## [v0.13.23](https://github.com/ash-project/ash_admin/compare/v0.13.22...v0.13.23) (2025-10-30)
+
+
+
+
+### Bug Fixes:
+
+* don't include nil tables when considering if polymorphic tables is empty by Zach Daniel
+
+## [v0.13.22](https://github.com/ash-project/ash_admin/compare/v0.13.21...v0.13.22) (2025-10-30)
+
+
+
+
+### Bug Fixes:
+
+* don't add the resource's primary table if there are no polymorphic tables by Zach Daniel
+
+## [v0.13.21](https://github.com/ash-project/ash_admin/compare/v0.13.20...v0.13.21) (2025-10-30)
+
+
+
+
+### Bug Fixes:
+
+* include resource's table in polymorphic tables dropdown by Zach Daniel
+
+### Improvements:
+
+* allow gettext ~> 1.0 (#368) by Aleksandr Lossenko
+
+## [v0.13.20](https://github.com/ash-project/ash_admin/compare/v0.13.19...v0.13.20) (2025-10-24)
+
+
+
+
+### Bug Fixes:
+
+* Add __spark_metadata__ field to Field struct (#366) by Jechol Lee
+
+## [v0.13.19](https://github.com/ash-project/ash_admin/compare/v0.13.18...v0.13.19) (2025-09-24)
+
+
+
+
+### Bug Fixes:
+
+* set brand on loading to_one relationships by Zach Daniel
+
+* use tenant when loading to_one relationships by Zach Daniel
+
+### Improvements:
+
+* support `actor_load` option by Zach Daniel
+
+## [v0.13.18](https://github.com/ash-project/ash_admin/compare/v0.13.17...v0.13.18) (2025-08-31)
+
+
+
+
+### Bug Fixes:
+
+* properly retain values for fallback rendered attribute inputs by Zach Daniel
+
+### Improvements:
+
+* inline jsoneditor and easymde for security by Zach Daniel
+
+## [v0.13.17](https://github.com/ash-project/ash_admin/compare/v0.13.16...v0.13.17) (2025-08-21)
+
+
+
+
+### Bug Fixes:
+
+* use `Resource.admin.show_action` (#359) by quartz
+
+## [v0.13.16](https://github.com/ash-project/ash_admin/compare/v0.13.15...v0.13.16) (2025-08-18)
+
+
+
+
+### Bug Fixes:
+
+* handle overflow & tenant form for long domains list by Zach Daniel
+
+## [v0.13.15](https://github.com/ash-project/ash_admin/compare/v0.13.14...v0.13.15) (2025-08-18)
+
+
+
+
+### Bug Fixes:
+
+* better names for version resources by Zach Daniel
+
+* Read phoenix js assests at compile time (#355) by Kenneth Kostrešević
+
+### Improvements:
+
+* add a little razzle dazzle to the authorizing/actor buttons (#352) by Andy LeClair
+
+* change svg icons to words (#351) by Andy LeClair
+
+## [v0.13.14](https://github.com/ash-project/ash_admin/compare/v0.13.13...v0.13.14) (2025-08-07)
+
+
+
+
+### Bug Fixes:
+
+* better names for version resources by Zach Daniel
+
+* Read phoenix js assests at compile time (#355) by Kenneth Kostrešević
+
+### Improvements:
+
+* add a little razzle dazzle to the authorizing/actor buttons (#352) by Andy LeClair
+
+* change svg icons to words (#351) by Andy LeClair
+
+## [v0.13.13](https://github.com/ash-project/ash_admin/compare/v0.13.12...v0.13.13) (2025-07-29)
+
+
+
+
+### Bug Fixes:
+
+* Add `ash_admin: 2` in locals_without_parens (#348) by kik4444
+
+## [v0.13.12](https://github.com/ash-project/ash_admin/compare/v0.13.11...v0.13.12) (2025-07-17)
+
+
+
+
+### Bug Fixes:
+
+* properly only show dropdowns on related resources by Zach Daniel
+
+### Improvements:
+
+* support liveview 1.1-rc by Zach Daniel
+
+## [v0.13.11](https://github.com/ash-project/ash_admin/compare/v0.13.10...v0.13.11) (2025-07-02)
+
+
+
+
+### Bug Fixes:
+
+* Prevent double HTML escaping (#332) by Jechol Lee
+
+* Encode/decode cookie values in JS (#328) by Jechol Lee
+
+## [v0.13.10](https://github.com/ash-project/ash_admin/compare/v0.13.9...v0.13.10) (2025-06-18)
+
+
+
+
+### Improvements:
+
+* Change level of repetitive log (#324) by capoccias
+
+## [v0.13.9](https://github.com/ash-project/ash_admin/compare/v0.13.8...v0.13.9) (2025-06-06)
+
+
+
+
+### Bug Fixes:
+
+* don't use access protocol on structs by Zach Daniel
+
+## [v0.13.8](https://github.com/ash-project/ash_admin/compare/v0.13.7...v0.13.8) (2025-06-06)
+
+
+
+
+### Bug Fixes:
+
+* handle case where no uploads are present by Zach Daniel
+
+## [v0.13.7](https://github.com/ash-project/ash_admin/compare/v0.13.6...v0.13.7) (2025-06-04)
+
+
+
+
+### Bug Fixes:
+
+* allow uploads in nested forms
+
+* lookup and consume upload entries correctly
+
+* Handle cross-domain links (#314)
+
+* Handle cross-domain links
+
+### Improvements:
+
+* add upload options for `Ash.Type.File` arguments (#316)
+
+## [v0.13.6](https://github.com/ash-project/ash_admin/compare/v0.13.5...v0.13.6) (2025-06-01)
+
+
+
+
+### Bug Fixes:
+
+* various mistakes in union type handling
+
+* don't assume `form.source.type` is set
+
+* Handle cross-domain links
+
+## [v0.13.5](https://github.com/ash-project/ash_admin/compare/v0.13.4...v0.13.5) (2025-05-20)
+
+
+
+
+### Bug Fixes:
+
+* don't duplicate `ash_admin` routes on installation
+
+## [v0.13.4](https://github.com/ash-project/ash_admin/compare/v0.13.3...v0.13.4) (2025-04-09)
+
+
+
+
+### Bug Fixes:
+
+* don't display union type field for `nil` values
+
+## [v0.13.3](https://github.com/ash-project/ash_admin/compare/v0.13.2...v0.13.3) (2025-03-18)
+
+
+
+
+### Bug Fixes:
+
+* use actor, authorize? and tenant from context for relationship field
+
+## [v0.13.2](https://github.com/ash-project/ash_admin/compare/v0.13.1...v0.13.2) (2025-03-05)
+
+
+
+
+### Bug Fixes:
+
+* show show_page properly
+
+## [v0.13.1](https://github.com/ash-project/ash_admin/compare/v0.13.0...v0.13.1) (2025-02-22)
+
+
+
+
+### Bug Fixes:
+
+* use AbortSignal in Typeahead hook to remove up event listeners
+
+### Improvements:
+
+* Search max items default (#274)
+
+## [v0.13.0](https://github.com/ash-project/ash_admin/compare/v0.12.6...v0.13.0) (2025-02-17)
+
+
+
+
+### Features:
+
+* Select/Typeahead for related items using `label_field` (#222)
 
 ## [v0.12.6](https://github.com/ash-project/ash_admin/compare/v0.12.5...v0.12.6) (2025-01-13)
 

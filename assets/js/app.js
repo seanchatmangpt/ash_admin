@@ -1,7 +1,57 @@
-import "phoenix_html";
-import { Socket } from "phoenix";
+// SPDX-FileCopyrightText: 2020 Zach Daniel
+// SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs.contributors>
+//
+// SPDX-License-Identifier: MIT
+
 import topbar from "../vendor/topbar";
-import { LiveSocket } from "phoenix_live_view";
+// vendored Sortable.js for drag-and-drop reordering of primitive array fields
+import Sortable from "../vendor/sortable";
+import {
+  EditorView, keymap, lineNumbers, highlightActiveLineGutter,
+  highlightSpecialChars, drawSelection, dropCursor, rectangularSelection,
+  crosshairCursor, highlightActiveLine
+} from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import {
+  syntaxHighlighting, defaultHighlightStyle, indentOnInput,
+  bracketMatching, foldGutter, foldKeymap
+} from "@codemirror/language";
+import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
+import { json, jsonParseLinter } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { linter, lintKeymap } from "@codemirror/lint";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { marked } from "marked";
+
+// basicSetup minus closeBrackets (which causes cursor jumps in JSON editing)
+const editorSetup = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    ...lintKeymap,
+  ]),
+];
 
 let socketPath =
   document.querySelector("html").getAttribute("phx-socket") || "/live";
@@ -11,112 +61,233 @@ let csrfToken = document
 let Hooks = {};
 const editors = {};
 
+function isDarkMode() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function darkThemeExtension() {
+  return isDarkMode() ? oneDark : [];
+}
+
+function getCspNonce() {
+  const meta = document.querySelector('meta[name="csp-nonce-style"]');
+  return meta ? meta.getAttribute("content") : undefined;
+}
+
+function cspNonceExtension() {
+  const nonce = getCspNonce();
+  return nonce ? EditorView.cspNonce.of(nonce) : [];
+}
+
 Hooks.JsonEditor = {
   mounted() {
     const inputId = this.el.getAttribute("data-input-id");
-    const hook = this;
-    this.editor = new JSONEditor(
-      this.el,
-      {
-        onChangeText: (json) => {
-          const target = document.getElementById(inputId);
-          try {
-            JSON.parse(json);
-            target.value = json;
-            target.dispatchEvent(
-              new Event("change", { bubbles: true, target: this.el.name }),
-            );
-          } catch (_e) {}
-        },
-        onChange: () => {
-          try {
-            const target = document.getElementById(inputId);
-            json = hook.editor.get();
+    const target = document.getElementById(inputId);
+    const initialValue = target.value || "{}";
 
-            target.value = JSON.stringify(json);
-            target.dispatchEvent(
-              new Event("change", { bubbles: true, target: this.el.name }),
-            );
-          } catch (_e) {}
-        },
-        onModeChange: (newMode) => {
-          hook.mode = newMode;
-        },
-        modes: ["text", "tree"],
-      },
-      JSON.parse(document.getElementById(inputId).value),
-    );
+    this.view = new EditorView({
+      doc: initialValue,
+      extensions: [
+        editorSetup,
+        json(),
+        linter(jsonParseLinter()),
+        darkThemeExtension(),
+        cspNonceExtension(),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const text = update.state.doc.toString();
+            try {
+              JSON.parse(text);
+              // Mark that this change came from the user, so JsonEditorSource
+              // skips the server echo and avoids a double-encoding feedback loop.
+              editors[this.el.id].skipNextUpdate = true;
+              target.value = text;
+              target.dispatchEvent(new Event("change", { bubbles: true }));
+            } catch (_e) { }
+          }
+        }),
+      ],
+      parent: this.el,
+    });
 
-    editors[this.el.id] = this.editor;
+    editors[this.el.id] = { view: this.view, skipNextUpdate: false };
+  },
+  destroyed() {
+    if (this.view) {
+      this.view.destroy();
+      delete editors[this.el.id];
+    }
   },
 };
 
 Hooks.JsonEditorSource = {
   updated() {
     try {
-      let editor = editors[this.el.getAttribute("data-editor-id")];
-      if (editor.getMode() === "tree") {
-        editor.update(JSON.parse(this.el.value));
-      } else {
-        if (editor.get() !== JSON.parse(this.el.value)) {
-          editor.setText(this.el.value);
-        } else {
-        }
+      const entry = editors[this.el.getAttribute("data-editor-id")];
+      if (!entry) return;
+      // If the update was triggered by the user editing in CM6, skip pushing
+      // the server's re-encoded value back (it may be double-encoded).
+      if (entry.skipNextUpdate) {
+        entry.skipNextUpdate = false;
+        return;
       }
-    } catch (_e) {}
+      const newValue = this.el.value;
+      const currentValue = entry.view.state.doc.toString();
+      if (currentValue !== newValue) {
+        entry.view.dispatch({
+          changes: { from: 0, to: entry.view.state.doc.length, insert: newValue },
+        });
+      }
+    } catch (_e) { }
   },
 };
 
 Hooks.JsonView = {
-  updated() {
-    const json = JSON.parse(this.el.getAttribute("data-json"));
-    this.editor = new JSONEditor(
-      this.el,
-      {
-        mode: "preview",
-      },
-      json,
-    );
-  },
   mounted() {
-    const json = JSON.parse(this.el.getAttribute("data-json"));
-    this.editor = new JSONEditor(
-      this.el,
-      {
-        mode: "preview",
-      },
-      json,
-    );
+    this._createView();
+  },
+  updated() {
+    if (this.view) {
+      this.view.destroy();
+    }
+    this._createView();
+  },
+  _createView() {
+    const jsonStr = this.el.getAttribute("data-json");
+    let formatted;
+    try {
+      formatted = JSON.stringify(JSON.parse(jsonStr), null, 2);
+    } catch (_e) {
+      formatted = jsonStr;
+    }
+
+    this.view = new EditorView({
+      doc: formatted,
+      extensions: [
+        editorSetup,
+        json(),
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+        darkThemeExtension(),
+        cspNonceExtension(),
+      ],
+      parent: this.el,
+    });
+  },
+  destroyed() {
+    if (this.view) {
+      this.view.destroy();
+    }
   },
 };
-
-const init = (element) =>
-  new EasyMDE({
-    element: element,
-    initialValue: element.getAttribute("value"),
-  });
 
 Hooks.MarkdownEditor = {
   mounted() {
     const id = this.el.getAttribute("data-target-id");
     const el = document.getElementById(id);
-    const easyMDE = init(el);
-    easyMDE.codemirror.on("change", () => {
-      el.value = easyMDE.value();
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+    const initialValue = el.value || el.textContent || "";
+
+    // Hide the textarea — CM6 replaces it visually, textarea stays as hidden form field
+    el.style.display = "none";
+
+    // Build side-by-side layout: toolbar + editor | preview
+    const container = document.createElement("div");
+    container.className = "md-editor-container";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "md-editor-toolbar";
+
+    const maximizeBtn = document.createElement("button");
+    maximizeBtn.type = "button";
+    maximizeBtn.className = "md-editor-maximize-btn";
+    maximizeBtn.title = "Fullscreen";
+    maximizeBtn.innerHTML = "&#x26F6;";
+    toolbar.appendChild(maximizeBtn);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "md-editor-wrapper";
+
+    const editorPane = document.createElement("div");
+    editorPane.className = "md-editor-pane";
+
+    const preview = document.createElement("div");
+    preview.className = "md-preview-pane prose dark:prose-invert max-w-none";
+    preview.innerHTML = marked.parse(initialValue);
+
+    wrapper.appendChild(editorPane);
+    wrapper.appendChild(preview);
+    container.appendChild(toolbar);
+    container.appendChild(wrapper);
+    this.el.appendChild(container);
+
+    // Fullscreen toggle
+    const closeFullscreen = () => {
+      container.classList.remove("md-fullscreen");
+      document.body.style.overflow = "";
+    };
+
+    maximizeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (container.classList.contains("md-fullscreen")) {
+        closeFullscreen();
+      } else {
+        container.classList.add("md-fullscreen");
+        document.body.style.overflow = "hidden";
+        this.view.focus();
+      }
+    });
+
+    // Close on Escape
+    container.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && container.classList.contains("md-fullscreen")) {
+        e.preventDefault();
+        closeFullscreen();
+      }
+    });
+
+    this._container = container;
+    this._closeFullscreen = closeFullscreen;
+
+    this.view = new EditorView({
+      doc: initialValue,
+      extensions: [
+        editorSetup,
+        markdown(),
+        darkThemeExtension(),
+        cspNonceExtension(),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const text = update.state.doc.toString();
+            el.value = text;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            preview.innerHTML = marked.parse(text);
+          }
+        }),
+      ],
+      parent: editorPane,
     });
   },
+  destroyed() {
+    if (this._closeFullscreen) this._closeFullscreen();
+    if (this.view) {
+      this.view.destroy();
+    }
+  },
 };
+
+function setCookie(name, value) {
+  // Avoid storing the string "null"/"undefined" from encodeURIComponent(null)
+  document.cookie = name + "=" + (value != null ? encodeURIComponent(value) : "") + ";path=/";
+}
 
 Hooks.Actor = {
   mounted() {
     this.handleEvent("set_actor", (payload) => {
-      document.cookie = "actor_resource" + "=" + payload.resource + ";path=/";
-      document.cookie =
-        "actor_primary_key" + "=" + payload.primary_key + ";path=/";
-      document.cookie = "actor_action" + "=" + payload.action + ";path=/";
-      document.cookie = "actor_domain" + "=" + payload.domain + ";path=/";
-      document.cookie = "actor_tenant" + "=" + payload.tenant + ";path=/";
+      setCookie("actor_resource", payload.resource);
+      setCookie("actor_primary_key", payload.primary_key);
+      setCookie("actor_action", payload.action);
+      setCookie("actor_domain", payload.domain);
+      setCookie("actor_tenant", payload.tenant);
     });
     this.handleEvent("clear_actor", () => {
       document.cookie = "actor_resource" + "=" + ";path=/";
@@ -140,12 +311,25 @@ Hooks.Actor = {
 Hooks.Tenant = {
   mounted() {
     this.handleEvent("set_tenant", (payload) => {
-      document.cookie = "tenant" + "=" + payload.tenant + ";path=/";
+      setCookie("tenant", payload.tenant);
     });
     this.handleEvent("clear_tenant", () => {
-      document.cookie = "tenant" + "=" + ";path=/";
+      setCookie("tenant", null);
     });
   },
+};
+
+Hooks.PositionAbove = {
+  mounted() { this.position(); },
+  updated() { this.position(); },
+  position() {
+    const input = this.el.nextElementSibling?.querySelector("input");
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    this.el.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+    this.el.style.left = rect.left + "px";
+    this.el.style.width = rect.width + "px";
+  }
 };
 
 Hooks.MaintainAttrs = {
@@ -163,10 +347,99 @@ Hooks.MaintainAttrs = {
   },
 };
 
+// Sortable.js drag-and-drop for array fields
+Hooks.Sortable = {
+  // initialize Sortable on the array container when the LiveView hook mounts
+  mounted() {
+    this.sortable = new Sortable(this.el, {
+      animation: 150,
+      draggable: '[data-sortable="true"]',
+      handle: '[data-sort-handle="true"]',
+      ghostClass: "sortable-ghost",
+      dragClass: "sortable-drag",
+      forceFallback: true,
+      // after a drop, send the new row order to the server
+      onEnd: () => {
+        const indices = Array.from(
+          this.el.querySelectorAll('[data-sortable="true"]')
+        ).map((el) => el.dataset.sortIndex);
+        if (indices.length < 2) return;
+        this.pushEventTo(this.el, "update_array_sorting", {
+          path: this.el.dataset.path,
+          field: this.el.dataset.field,
+          indices: indices,
+        });
+      },
+    });
+  },
+  // tear down the Sortable instance when the hook is destroyed
+  destroyed() {
+    if (this.sortable) {
+      this.sortable.destroy();
+    }
+  },
+};
+
+Hooks.Typeahead = {
+  mounted() {
+    this.aborter = new AbortController();
+    const signal = this.aborter.signal;
+
+    const target_id = this.el.getAttribute("data-target-id");
+    const target_el = document.getElementById(target_id);
+
+    switch (this.el.tagName) {
+      case "INPUT":
+        this.el.addEventListener("keydown", e => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+          }
+        }, { signal });
+        this.el.addEventListener("keyup", e => {
+          switch (e.key) {
+            case "Enter":
+            case "Escape":
+              this.el.blur();
+              window.setTimeout(function () { target_el.dispatchEvent(new Event("input", { bubbles: true })) }, 750);
+              break;
+          }
+        }, { signal });
+        break;
+
+      case "LI":
+        this.el.addEventListener("click", e => {
+          window.setTimeout(function () { target_el.dispatchEvent(new Event("input", { bubbles: true })) }, 750);
+        }, { signal });
+        break;
+    }
+  },
+  updated() {
+    if (this.el.tagName === "INPUT" && this.el.name.match(/suggest$/) && this.el.value.length === 0) {
+      this.el.focus();
+    }
+  },
+  beforeDestroy() {
+    if (this.aborter) {
+      this.aborter.abort();
+    }
+  }
+};
+
 function getCookie(name) {
-  var re = new RegExp(name + "=([^;]+)");
-  var value = re.exec(document.cookie);
-  return value != null ? unescape(value[1]) : null;
+  // Match the cookie name by exact equality. An unanchored regex would let a
+  // cookie whose name merely ends with `name` (e.g. `xactor_authorizing`,
+  // settable from a sibling subdomain) shadow the real one.
+  var cookies = document.cookie ? document.cookie.split("; ") : [];
+  for (var i = 0; i < cookies.length; i++) {
+    var eq = cookies[i].indexOf("=");
+    if (eq === -1) continue;
+    if (cookies[i].slice(0, eq) === name) {
+      var decoded = decodeURIComponent(cookies[i].slice(eq + 1));
+      // encodeURIComponent(null) produces the string "null", normalize it back
+      return decoded === "null" || decoded === "undefined" ? null : decoded;
+    }
+  }
+  return null;
 }
 
 let params = () => {
@@ -183,7 +456,7 @@ let params = () => {
   };
 };
 
-let liveSocket = new LiveSocket(socketPath, Socket, {
+let liveSocket = new LiveView.LiveSocket(socketPath, Phoenix.Socket, {
   params: params,
   hooks: Hooks,
   dom: {

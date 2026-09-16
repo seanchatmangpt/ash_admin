@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2020 Zach Daniel
+// SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs.contributors>
+//
+// SPDX-License-Identifier: MIT
+
 // See the Tailwind configuration guide for advanced usage
 // https://tailwindcss.com/docs/configuration
 
@@ -6,7 +11,14 @@ const fs = require("fs");
 const path = require("path");
 
 module.exports = {
-  content: ["./js/**/*.js", "./../lib/ash_admin/components/**/*.*ex"],
+  darkMode: 'media',
+  content: [
+    "./js/**/*.js",
+    "./../lib/ash_admin/components/**/*.*ex",
+    "./../lib/ash_admin/pages/**/*.*ex",
+    "../deps/cinder/**/*.*ex",
+  ],
+  safelist: ["prose", "dark:prose-invert", "max-w-none", "border-l-4"],
   theme: {
     extend: {
       colors: {
@@ -16,6 +28,7 @@ module.exports = {
   },
   plugins: [
     require("@tailwindcss/forms"),
+    require("@tailwindcss/typography"),
     // Allows prefixing tailwind classes with LiveView classes to add rules
     // only when LiveView classes are applied, for example:
     //
@@ -25,19 +38,19 @@ module.exports = {
       addVariant("phx-click-loading", [
         ".phx-click-loading&",
         ".phx-click-loading &",
-      ])
+      ]),
     ),
     plugin(({ addVariant }) =>
       addVariant("phx-submit-loading", [
         ".phx-submit-loading&",
         ".phx-submit-loading &",
-      ])
+      ]),
     ),
     plugin(({ addVariant }) =>
       addVariant("phx-change-loading", [
         ".phx-change-loading&",
         ".phx-change-loading &",
-      ])
+      ]),
     ),
 
     // Embeds Heroicons (https://heroicons.com) into your app.css bundle
@@ -77,7 +90,7 @@ module.exports = {
             };
           },
         },
-        { values }
+        { values },
       );
     }),
   ],

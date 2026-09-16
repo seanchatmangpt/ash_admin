@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Components.Resource.Show do
   @moduledoc false
   use Phoenix.LiveComponent
@@ -20,7 +25,7 @@ defmodule AshAdmin.Components.Resource.Show do
 
   def render(assigns) do
     ~H"""
-    <div class="md:pt-10 sm:mt-0 bg-gray-300 min-h-screen pb-20">
+    <div class="md:pt-10 sm:mt-0">
       <div class="md:grid md:grid-cols-3 md:gap-6 md:mx-16 md:mt-10">
         <div class="mt-5 md:mt-0 md:col-span-2">
           {render_show(assigns, @record, @resource)}
@@ -44,7 +49,7 @@ defmodule AshAdmin.Components.Resource.Show do
     assigns = assign(assigns, record: record, resource: resource, title: title, buttons: buttons?)
 
     ~H"""
-    <div class="shadow-lg overflow-hidden sm:rounded-md bg-white">
+    <div class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden sm:rounded-md bg-white dark:bg-slate-900">
       <h1 :if={@title} class="pt-2 pl-4 text-lg">{@title}</h1>
       <button
         :if={AshAdmin.Resource.actor?(@resource)}
@@ -54,7 +59,7 @@ defmodule AshAdmin.Components.Resource.Show do
         phx-value-domain={@domain}
         phx-value-pkey={encode_primary_key(@record)}
       >
-        <.icon name="hero-key" class="h-5 w-5 text-gray-500" />
+        <.icon name="hero-key" class="h-5 w-5 text-slate-500 dark:text-slate-400" />
       </button>
       <div class="px-4 py-5 sm:p-6">
         <div>
@@ -62,16 +67,32 @@ defmodule AshAdmin.Components.Resource.Show do
           <div :if={@buttons} class="px-4 py-3 text-right sm:px-6">
             <.link
               :if={destroy?(@resource)}
-              navigate={"#{@prefix}?domain=#{AshAdmin.Domain.name(@domain)}&resource=#{AshAdmin.Resource.name(@resource)}&action_type=destroy&table=#{@table}&primary_key=#{encode_primary_key(@record)}"}
-              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              navigate={
+                admin_path(@prefix,
+                  domain: AshAdmin.Domain.name(@domain),
+                  resource: AshAdmin.Resource.name(@resource),
+                  action_type: "destroy",
+                  table: @table,
+                  primary_key: encode_primary_key(@record)
+                )
+              }
+              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
               Destroy
             </.link>
 
             <.link
               :if={update?(@resource)}
-              navigate={"#{@prefix}?domain=#{AshAdmin.Domain.name(@domain)}&resource=#{AshAdmin.Resource.name(@resource)}&action_type=update&table=#{@table}&primary_key=#{encode_primary_key(@record)}"}
-              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              navigate={
+                admin_path(@prefix,
+                  domain: AshAdmin.Domain.name(@domain),
+                  resource: AshAdmin.Resource.name(@resource),
+                  action_type: "update",
+                  table: @table,
+                  primary_key: encode_primary_key(@record)
+                )
+              }
+              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
               Update
             </.link>
@@ -89,7 +110,7 @@ defmodule AshAdmin.Components.Resource.Show do
     ~H"""
     <div
       :for={{calculation, calculation_form} <- @calculations}
-      class="shadow-lg overflow-hidden sm:rounded-md mb-2 bg-white"
+      class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden sm:rounded-md mb-2 bg-white dark:bg-slate-900"
     >
       <div class="px-4 py-5 mt-2">
         <div>{to_name(calculation.name)}</div>
@@ -126,10 +147,10 @@ defmodule AshAdmin.Components.Resource.Show do
             }>
               {inspect(@calculation_errors[calculation.name])}
             </.error>
-            <div class="px-4 py-3 text-right sm:px-6 text-right">
+            <div class="px-4 py-3 text-right sm:px-6">
               <button
                 type="submit"
-                class="py-2 px-4 mt-2 bg-indigo-600 text-white border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+                class="py-2 px-4 mt-2 bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-300 dark:border-slate-600 hover:bg-slate-700 dark:hover:bg-slate-300 rounded-md justify-center items-center"
               >
                 Calculate
               </button>
@@ -147,7 +168,7 @@ defmodule AshAdmin.Components.Resource.Show do
     ~H"""
     <div
       :for={relationship <- AshAdmin.Components.Resource.Form.relationships(@resource, :show)}
-      class="shadow-lg overflow-hidden sm:rounded-md mb-2 bg-white"
+      class="shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 overflow-hidden sm:rounded-md mb-2 bg-white dark:bg-slate-900"
     >
       <div class="px-4 py-5 mt-2">
         <div>
@@ -158,7 +179,7 @@ defmodule AshAdmin.Components.Resource.Show do
             phx-target={@myself}
             phx-value-relationship={relationship.name}
             type="button"
-            class="flex py-2 ml-4 px-4 mt-2 bg-indigo-600 text-white border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+            class="flex py-2 ml-4 px-4 mt-2 bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-300 dark:border-slate-600 hover:bg-slate-700 dark:hover:bg-slate-300 rounded-md justify-center items-center"
           >
             Load
           </button>
@@ -168,7 +189,7 @@ defmodule AshAdmin.Components.Resource.Show do
             phx-target={@myself}
             phx-value-relationship={relationship.name}
             type="button"
-            class="flex py-2 ml-4 px-4 mt-2 bg-indigo-600 text-white border-gray-600 hover:bg-gray-400 rounded-md justify-center items-center"
+            class="flex py-2 ml-4 px-4 mt-2 bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-300 dark:border-slate-600 hover:bg-slate-700 dark:hover:bg-slate-300 rounded-md justify-center items-center"
           >
             Unload
           </button>
@@ -244,8 +265,19 @@ defmodule AshAdmin.Components.Resource.Show do
           <div class="px-4 py-3 text-right sm:px-6">
             <.link
               :if={AshAdmin.Resource.show_action(@destination)}
-              navigate={"#{@prefix}?domain=#{AshAdmin.Domain.name(@destination_domain || @domain)}&resource=#{AshAdmin.Resource.name(@destination)}&table=#{@context[:data_layer][:table]}&primary_key=#{encode_primary_key(@record)}"}
-              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              navigate={
+                admin_path(@prefix,
+                  domain:
+                    AshAdmin.Domain.name(
+                      @destination_domain || Ash.Resource.Info.domain(@destination) || @domain
+                    ),
+                  resource: AshAdmin.Resource.name(@destination),
+                  table: @context[:data_layer][:table],
+                  primary_key: encode_primary_key(@record),
+                  action_type: "read"
+                )
+              }
+              class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
               Show
             </.link>
@@ -260,7 +292,8 @@ defmodule AshAdmin.Components.Resource.Show do
          name: name,
          destination: destination,
          context: context,
-         destination_attribute: destination_attribute
+         destination_attribute: destination_attribute,
+         domain: destination_domain
        }) do
     data = Map.get(record, name)
 
@@ -268,6 +301,8 @@ defmodule AshAdmin.Components.Resource.Show do
       assign(assigns,
         data: data,
         destination: destination,
+        destination_domain: destination_domain,
+        destination_format_fields: AshAdmin.Resource.format_fields(destination),
         context: context,
         destination_attribute: destination_attribute,
         relationship_name: name
@@ -278,7 +313,8 @@ defmodule AshAdmin.Components.Resource.Show do
       <Table.table
         data={@data}
         resource={@destination}
-        domain={@domain}
+        format_fields={@destination_format_fields}
+        domain={@destination_domain || Ash.Resource.Info.domain(@destination) || @domain}
         table={@context[:data_layer][:table]}
         prefix={@prefix}
         skip={[@destination_attribute]}
@@ -314,7 +350,9 @@ defmodule AshAdmin.Components.Resource.Show do
           ])
         }
       >
-        <div class="block text-sm font-medium text-gray-700">{to_name(attribute.name)}</div>
+        <div class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          {to_name(attribute.name)}
+        </div>
         <div>
           {render_maybe_sensitive_attribute(
             assigns,
@@ -328,7 +366,7 @@ defmodule AshAdmin.Components.Resource.Show do
     </div>
     <div :if={!Enum.empty?(@flags)} class="hidden sm:block" aria-hidden="true">
       <div class="py-5">
-        <div class="border-t border-gray-200" />
+        <div class="border-t border-slate-200 dark:border-slate-700" />
       </div>
     </div>
     <div :if={!Enum.empty?(@flags)} class="grid grid-cols-6 gap-6">
@@ -342,7 +380,9 @@ defmodule AshAdmin.Components.Resource.Show do
           ])
         }
       >
-        <div class="block text-sm font-medium text-gray-700">{to_name(attribute.name)}</div>
+        <div class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          {to_name(attribute.name)}
+        </div>
         <div>
           {render_maybe_sensitive_attribute(
             assigns,
@@ -356,7 +396,7 @@ defmodule AshAdmin.Components.Resource.Show do
     </div>
     <div :if={!Enum.empty?(@bottom_attributes)} class="hidden sm:block" aria-hidden="true">
       <div class="py-5">
-        <div class="border-t border-gray-200" />
+        <div class="border-t border-slate-200 dark:border-slate-700" />
       </div>
     </div>
     <div :if={!Enum.empty?(@bottom_attributes)} class="grid grid-cols-6 gap-6">
@@ -371,7 +411,9 @@ defmodule AshAdmin.Components.Resource.Show do
           ])
         }
       >
-        <div class="block text-sm font-medium text-gray-700">{to_name(attribute.name)}</div>
+        <div class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          {to_name(attribute.name)}
+        </div>
         <div>
           {render_maybe_sensitive_attribute(
             assigns,
@@ -473,6 +515,32 @@ defmodule AshAdmin.Components.Resource.Show do
          assigns,
          resource,
          record,
+         %{type: Ash.Type.Struct} = attribute,
+         relationship_name,
+         nested?
+       ) do
+    struct_map =
+      record
+      |> Map.get(attribute.name)
+      |> case do
+        nil -> nil
+        value -> Map.from_struct(value)
+      end
+
+    render_attribute(
+      assigns,
+      resource,
+      Map.put(record, attribute.name, struct_map),
+      %{attribute | type: Ash.Type.Map},
+      relationship_name,
+      nested?
+    )
+  end
+
+  defp render_attribute(
+         assigns,
+         resource,
+         record,
          %{type: {:array, Ash.Type.Map}} = attribute,
          relationship_name,
          nested?
@@ -530,17 +598,17 @@ defmodule AshAdmin.Components.Resource.Show do
     case Map.get(record, name) do
       true ->
         ~H"""
-        <.icon name="hero-check" class="h-4 w-4 text-gray-600" />
+        <.icon name="hero-check" class="h-4 w-4 text-slate-600 dark:text-slate-400" />
         """
 
       false ->
         ~H"""
-        <.icon name="hero-x-mark" class="h-4 w-4 text-gray-600" />
+        <.icon name="hero-x-mark" class="h-4 w-4 text-slate-600 dark:text-slate-400" />
         """
 
-      nil ->
+      _ ->
         ~H"""
-        <.icon name="hero-minus" class="h-4 w-4 text-gray-600" />
+        <.icon name="hero-minus" class="h-4 w-4 text-slate-600 dark:text-slate-400" />
         """
     end
   end
@@ -652,7 +720,7 @@ defmodule AshAdmin.Components.Resource.Show do
                   rows="3"
                   cols="40"
                   disabled
-                  class="resize-y mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                  class="resize-y mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
                 ><%= value!(Map.get(@record, @attribute.name)) %></textarea>
                 """
 
@@ -662,26 +730,15 @@ defmodule AshAdmin.Components.Resource.Show do
                   rows="1"
                   cols="20"
                   disabled
-                  class="resize-y mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                  class="resize-y mt-1 focus:ring-slate-500 focus:border-slate-400 block w-full shadow-sm sm:text-sm border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 rounded-md"
                 ><%= value!(Map.get(@record, @attribute.name)) %></textarea>
                 """
             end
 
-          type
-          when type in [
-                 Ash.Type.Date,
-                 Ash.Type.DateTime,
-                 Ash.Type.Time,
-                 Ash.Type.NaiveDatetime,
-                 Ash.Type.UtcDatetime,
-                 Ash.Type.UtcDatetimeUsec
-               ] ->
+          _ ->
             resource
             |> AshAdmin.Resource.format_fields()
             |> FormatHelper.format_attribute(record, attribute)
-
-          _ ->
-            value!(Map.get(record, attribute.name))
         end
       end
     end
@@ -710,39 +767,51 @@ defmodule AshAdmin.Components.Resource.Show do
     {:noreply, assign(socket, :calculations, calculations)}
   end
 
-  # sobelow_skip ["DOS.StringToAtom"]
   def handle_event("calculate", %{"calculation" => calculation} = event, socket) do
     record = socket.assigns.record
     domain = socket.assigns.domain
 
-    arguments =
-      event
-      |> Map.get(calculation, [])
-      |> Enum.map(fn {attr, value} -> {String.to_atom(attr), value} end)
-      # This is a hack, it should not be populated in the form
-      # or use used inputs etc.
-      |> Enum.reject(fn {_, v} -> v in ["", nil] end)
+    # Resolve the calculation by matching known calculations by name, and map
+    # each submitted argument key to a *declared* argument. Client-supplied keys
+    # are never passed to String.to_atom/1, which would mint an atom per unique
+    # key and exhaust the atom table (a whole-node DoS).
+    calculation =
+      Enum.find(
+        Ash.Resource.Info.calculations(record.__struct__),
+        &(to_string(&1.name) == calculation)
+      )
 
-    calculation = String.to_existing_atom(calculation)
+    if calculation do
+      arguments =
+        event
+        |> Map.get(to_string(calculation.name), [])
+        |> Enum.flat_map(fn {attr, value} ->
+          case Enum.find(calculation.arguments, &(to_string(&1.name) == attr)) do
+            nil -> []
+            arg -> [{arg.name, value}]
+          end
+        end)
+        |> Enum.reject(fn {_, v} -> v in ["", nil] end)
 
-    calculations =
-      [{calculation, arguments}]
+      case Ash.load(
+             record,
+             [{calculation.name, arguments}],
+             domain: domain,
+             actor: socket.assigns[:actor],
+             authorize?: socket.assigns[:authorizing]
+           ) do
+        {:ok, loaded} ->
+          {:noreply, assign(socket, record: loaded)}
 
-    case Ash.load(
-           record,
-           calculations,
-           domain: domain,
-           actor: socket.assigns[:actor],
-           authorize?: socket.assigns[:authorizing]
-         ) do
-      {:ok, loaded} ->
-        {:noreply, assign(socket, record: loaded)}
-
-      {:error, errors} ->
-        {:noreply,
-         assign(socket,
-           calculation_errors: Map.put(socket.assigns.calculation_errors, calculation, errors)
-         )}
+        {:error, errors} ->
+          {:noreply,
+           assign(socket,
+             calculation_errors:
+               Map.put(socket.assigns.calculation_errors, calculation.name, errors)
+           )}
+      end
+    else
+      {:noreply, socket}
     end
   end
 
@@ -910,17 +979,43 @@ defmodule AshAdmin.Components.Resource.Show do
     end
   end
 
-  defp value!(value) do
-    data = Phoenix.HTML.Safe.to_iodata(value)
+  defp value!(%{
+         __struct__: Postgrex.Range,
+         lower: lower,
+         upper: upper,
+         lower_inclusive: lower_inclusive,
+         upper_inclusive: upper_inclusive
+       }) do
+    lower_str =
+      case lower do
+        :unbound -> "-∞"
+        %DateTime{} = dt -> DateTime.to_string(dt)
+        other -> inspect(other)
+      end
 
-    if is_binary(data) and !String.valid?(data) do
+    upper_str =
+      case upper do
+        :unbound -> "+∞"
+        %DateTime{} = dt -> DateTime.to_string(dt)
+        other -> inspect(other)
+      end
+
+    lower_bracket = if lower_inclusive, do: "[", else: "("
+    upper_bracket = if upper_inclusive, do: "]", else: ")"
+
+    "#{lower_bracket}#{lower_str}, #{upper_str}#{upper_bracket}"
+  end
+
+  defp value!(value) do
+    if is_binary(value) and !String.valid?(value) do
       "<binary data>"
     else
-      data
+      data = Phoenix.HTML.Safe.to_iodata(value)
+      {:safe, data}
     end
   rescue
     e ->
-      Logger.error("Failed to display value:\n#{Exception.format(:error, e, __STACKTRACE__)}")
+      Logger.debug("Failed to display value:\n#{Exception.format(:error, e, __STACKTRACE__)}")
       "<display error>"
   end
 

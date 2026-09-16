@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+# SPDX-FileCopyrightText: 2020 ash_admin contributors <https://github.com/ash-project/ash_admin/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshAdmin.Router do
   @moduledoc """
   Provides LiveView routing for AshAdmin.
@@ -55,9 +60,11 @@ defmodule AshAdmin.Router do
 
     * `:csp_nonce_assign_key` - Optional assign key to find the CSP nonce value used for assets
       Supports either `atom()` or
-        `%{optional(:img) => atom(), optional(:script) => atom(), optional(:style) => atom()}`   
-        Defaults to `ash_admin-Ed55GFnX` for backwards compatibility.
-    
+        `%{optional(:img) => atom(), optional(:script) => atom(), optional(:style) => atom()}`
+        When omitted, AshAdmin generates a fresh random nonce per request for its
+        own inline assets. If your app enforces a nonce-based CSP, set this to the
+        assign key holding your per-request nonce so the values match.
+
     * `:live_session_name` - Optional atom to name the `live_session`. Defaults to `:ash_admin`.
 
   ## Examples
@@ -84,11 +91,10 @@ defmodule AshAdmin.Router do
       csp_nonce_assign_key =
         case opts[:csp_nonce_assign_key] do
           nil ->
-            %{
-              img: "ash_admin-Ed55GFnX",
-              style: "ash_admin-Ed55GFnX",
-              script: "ash_admin-Ed55GFnX"
-            }
+            # No app-provided nonce assign key: a per-request random nonce is
+            # generated at render time (see AshAdmin.Layouts). A static shared
+            # nonce would be a CSP bypass.
+            %{img: nil, style: nil, script: nil}
 
           key when is_atom(key) ->
             %{img: key, style: key, script: key}
